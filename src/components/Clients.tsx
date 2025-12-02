@@ -494,8 +494,9 @@ useEffect(() => {
       qualified: 'bg-green-100 text-green-800',
       followup: 'bg-yellow-100 text-yellow-800',
       negotiation: 'bg-orange-100 text-orange-800',
-      won: 'bg-emerald-100 text-emerald-800',
-      lost: 'bg-red-100 text-red-800'
+      won: 'bg-green-100 text-green-800',
+      lost: 'bg-red-100 text-red-800',
+      client: 'bg-green-100 text-green-800',
     };
     return colors[status];
   };

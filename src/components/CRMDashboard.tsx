@@ -102,6 +102,7 @@ interface SummaryData {
   rnr?: number;
   callback?: number;
   switchoff?: number;
+  won?: number;
 }
 
 const statusOptions = [
@@ -1444,12 +1445,14 @@ const CRMDashboard: React.FC = () => {
         rnr: 0,
         switchoff: 0,
         callback: 0,
+        won: 0,
       };
     }
 
     return {
       totalLeads: filteredLeads.length,
       existingclient: leads.filter(lead => lead.status === 'won').length,
+      won: leads.filter(lead => lead.status === 'won').length,
       newLeads: filteredLeads.filter(lead => lead.status === 'new').length,
       contactedLeads: filteredLeads.filter(lead => lead.status === 'Contacted').length,
       rnr: filteredLeads.filter(lead => lead.status === 'RNR').length,
@@ -2098,7 +2101,7 @@ const CRMDashboard: React.FC = () => {
           showTrend={true} className="h-full" />
         
         <SummaryCard
-          title="Won Leads" value={summaryData.qualifiedLeads} icon={CheckSquare} color="green" shadowColor="green" trend={{ value: 15.3, isPositive: true }} showTrend={true} className="h-full" />
+          title="Won Leads" value={summaryData.won} icon={CheckSquare} color="green" shadowColor="green" trend={{ value: 15.3, isPositive: true }} showTrend={true} className="h-full" />
       </div>
       
       {/* Bulk Actions Bar */}
