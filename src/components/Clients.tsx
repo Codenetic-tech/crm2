@@ -38,6 +38,7 @@ const statusOptions = [
   //{ value: 'negotiation', label: 'Negotiation', color: 'bg-orange-100 text-orange-800' },
   { value: 'won', label: 'Won', color: 'bg-emerald-100 text-emerald-800' },
   //{ value: 'lost', label: 'Lost', color: 'bg-red-100 text-red-800' }
+  { value: 'client', label: 'Client', color: 'bg-green-100 text-green-800' },
 ];
 
 // Rate limiting constants
@@ -50,7 +51,7 @@ const Clients: React.FC = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('won');
+  const [statusFilter, setStatusFilter] = useState<string>('client');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Lead; direction: 'asc' | 'desc' }>({ 
     key: 'createdAt', 
     direction: 'desc' 
