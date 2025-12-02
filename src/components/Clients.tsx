@@ -31,14 +31,14 @@ interface SummaryData {
 }
 
 const statusOptions = [
-  { value: 'new', label: 'New', color: 'bg-blue-100 text-blue-800' },
-  { value: 'Contacted', label: 'Contacted', color: 'bg-purple-100 text-purple-800' },
-  { value: 'followup', label: 'Followup', color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'qualified', label: 'Qualified', color: 'bg-green-100 text-green-800' },
+  //{ value: 'new', label: 'New', color: 'bg-blue-100 text-blue-800' },
+  //{ value: 'Contacted', label: 'Contacted', color: 'bg-purple-100 text-purple-800' },
+  //{ value: 'followup', label: 'Followup', color: 'bg-yellow-100 text-yellow-800' },
+  //{ value: 'qualified', label: 'Qualified', color: 'bg-green-100 text-green-800' },
   //{ value: 'negotiation', label: 'Negotiation', color: 'bg-orange-100 text-orange-800' },
-  { value: 'won', label: 'Won', color: 'bg-emerald-100 text-emerald-800' },
+  //{ value: 'won', label: 'Won', color: 'bg-emerald-100 text-emerald-800' },
   //{ value: 'lost', label: 'Lost', color: 'bg-red-100 text-red-800' }
-  { value: 'client', label: 'Client', color: 'bg-green-100 text-green-800' },
+  //{ value: 'client', label: 'Client', color: 'bg-green-100 text-green-800' },
 ];
 
 // Rate limiting constants
