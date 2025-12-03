@@ -133,7 +133,7 @@ const mapApiStatus = (apiStatus: string): Lead['status'] => {
     'Qualified': 'qualified',
     'Followup': 'followup',
     'Negotiation': 'negotiation',
-    'Won': 'won',
+    'won': 'won',
     'Lost': 'lost',
     'Client': 'client',
     'Not Interested': 'Not Interested',
