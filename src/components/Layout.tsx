@@ -44,7 +44,7 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
 
     try {
       const hierarchy: HierarchyNode[] = JSON.parse(user.hierarchy);
-      
+
       // Find the current user (hierarchy_level: 0)
       const currentUserNode = hierarchy.find(node => node.hierarchy_level === 0);
       if (!currentUserNode) {
@@ -55,11 +55,11 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
       // Function to build tree structure recursively
       const buildTreeForNode = (email: string): TreeDataNode[] => {
         const children = hierarchy.filter(node => node.reports_to === email);
-        
+
         return children.map(child => {
           const employeeId = child.username.replace('SKY', '');
           const displayName = `${child.first_name} ${employeeId}`;
-          
+
           return {
             label: displayName,
             value: child.email,
@@ -70,14 +70,14 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
 
       // Check if current user is in HO branch (top-level manager)
       const isHeadOffice = currentUserNode.branch === 'HO';
-      
+
       let computedTree: TreeDataNode[] = [];
-      
+
       if (isHeadOffice) {
         // For HO users, create structure: HO > Other Branches
         const directReports = hierarchy.filter(node => node.reports_to === currentUserNode.email);
         const branchGroups: Record<string, HierarchyNode[]> = {};
-        
+
         directReports.forEach(node => {
           const branch = node.branch || 'Other';
           if (!branchGroups[branch]) {
@@ -94,7 +94,7 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
             children: managers.map(manager => {
               const employeeId = manager.username.replace('SKY', '');
               const displayName = `${manager.first_name} ${employeeId}`;
-              
+
               return {
                 label: displayName,
                 value: manager.email,
@@ -107,7 +107,7 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
         // Create HO parent node
         const currentUserEmployeeId = currentUserNode.username.replace('SKY', '');
         const currentUserDisplayName = `${currentUserNode.first_name} ${currentUserEmployeeId}`;
-        
+
         computedTree = [
           {
             label: 'HO',
@@ -125,7 +125,7 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
         // For non-HO users (branch managers)
         const currentUserEmployeeId = currentUserNode.username.replace('SKY', '');
         const currentUserDisplayName = `${currentUserNode.first_name} ${currentUserEmployeeId}`;
-        
+
         computedTree = [
           {
             label: currentUserNode.branch,
@@ -140,7 +140,7 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
           }
         ];
       }
-      
+
       setHierarchyTreeData(computedTree);
       return computedTree;
     } catch (error) {
@@ -162,22 +162,22 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
   const mobileNavItems = [
     { icon: Home, label: 'Home', href: '/' },
     { icon: Users, label: 'Clients', href: '/' },
-    { 
-      icon: LogOut, 
-      label: 'Logout', 
+    {
+      icon: LogOut,
+      label: 'Logout',
       onClick: handleLogout,
       className: 'text-red-600 hover:text-red-700'
     },
   ];
 
   return (
-    <div className="min-h-screen flex w-full bg-slate-50">
+    <div className="h-screen flex w-full bg-slate-50 overflow-hidden">
       {/* Desktop Sidebar - Hidden on mobile */}
       <div className="hidden lg:block">
         <AppSidebar />
       </div>
 
-      <div className="flex-1 flex flex-col w-full">
+      <div className="flex-1 flex flex-col w-full h-full overflow-hidden">
         {/* Mobile Slide-out Menu */}
         {mobileMenuOpen && (
           <>
@@ -186,7 +186,7 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
               className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
               onClick={() => setMobileMenuOpen(false)}
             />
-            
+
             {/* Slide-out Menu */}
             <div className="lg:hidden fixed top-0 left-0 h-full w-64 bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out">
               <div className="p-4 border-b border-gray-200">
@@ -200,7 +200,7 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
                   </button>
                 </div>
               </div>
-              
+
               <nav className="p-4 space-y-2">
                 {mobileNavItems.map((item) => {
                   if (item.onClick) {
@@ -218,7 +218,7 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
                       </button>
                     );
                   }
-                  
+
                   return (
                     <a
                       key={item.label}
@@ -237,12 +237,12 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
         )}
 
         {/* Desktop Header - Hidden on mobile */}
-        <div className="hidden lg:block">
+        <div className="hidden lg:block flex-shrink-0">
           <Header hierarchyTreeData={hierarchyTreeData} />
         </div>
 
-        {/* Main Content */}
-        <main className="flex-1 p-0.5 lg:p-6 pb-16 lg:pb-6">
+        {/* Main Content - Scrollable */}
+        <main className="flex-1 overflow-y-auto p-0.5 lg:pl-6 lg:pr-6 lg:pt-6 pb-16 lg:pb-6">
           {children}
         </main>
 
@@ -257,9 +257,9 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
                     onClick={item.onClick}
                     className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors min-w-0 flex-1 ${item.className || ''}`}
                   >
-                    <item.icon 
-                      size={18} 
-                      className={item.className?.includes('red') ? 'text-red-600' : 'text-gray-600'} 
+                    <item.icon
+                      size={18}
+                      className={item.className?.includes('red') ? 'text-red-600' : 'text-gray-600'}
                     />
                     <span className={`text-[10px] truncate ${item.className?.includes('red') ? 'text-red-600' : 'text-gray-600'}`}>
                       {item.label}
@@ -267,7 +267,7 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
                   </button>
                 );
               }
-              
+
               return (
                 <a
                   key={item.label}

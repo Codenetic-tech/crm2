@@ -13,10 +13,12 @@ import { Sparkles } from 'lucide-react';
 import Dashboard from './components/management';
 import Incentive from './components/management';
 import Tickets from './components/tickets';
-import HRMS from './components/HRMS';
 import Clients from './components/Clients';
 import CRMAnalyticsDashboard from './components/CRM/CRMAnalyticsDashboard';
 import TasksKanbanPage from './components/tasks-kanban';
+import PettyCashPage from './components/petty-cash';
+import PettyCashManagement from './components/PettyCash/PettyCashManagement';
+import HRMS from './pages/hrms';
 
 const queryClient = new QueryClient();
 
@@ -37,11 +39,11 @@ const ComingSoon = () => (
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated } = useAuth();
-  
+
   if (!isAuthenticated) {
     return <Navigate to="/login" />;
   }
-  
+
   return <Layout>{children}</Layout>;
 };
 
@@ -61,120 +63,128 @@ const AppContent = () => {
   return (
     <BrowserRouter>
       <Routes>
-        <Route 
-          path="/login" 
+        <Route
+          path="/login"
           element={
-            isAuthenticated ? 
-              <Navigate to={getDefaultRoute(user?.role)} /> : 
+            isAuthenticated ?
+              <Navigate to={getDefaultRoute(user?.role)} /> :
               <LoginForm />
-          } 
+          }
         />
-        <Route 
-          path="/dashboard" 
+        <Route
+          path="/dashboard"
           element={
             <ProtectedRoute>
               <CRMAnalyticsDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
         {/* CRM Routes */}
-        <Route 
-          path="/crm" 
+        <Route
+          path="/crm"
           element={
             <ProtectedRoute>
               <CRMDashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/crm/leads/:leadId" 
+        <Route
+          path="/crm/leads/:leadId"
           element={
             <ProtectedRoute>
               <LeadDetailsPage />
             </ProtectedRoute>
-          } 
+          }
         />
-        
+
         {/* New Routes from Sidebar */}
-        <Route 
-          path="/realtime" 
+        <Route
+          path="/realtime"
           element={
             <ProtectedRoute>
               <ComingSoon />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/client" 
+        <Route
+          path="/client"
           element={
             <ProtectedRoute>
               <Clients />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/incentive" 
+        <Route
+          path="/incentive"
           element={
             <ProtectedRoute>
               <ComingSoon />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/tickets" 
+        <Route
+          path="/tickets"
           element={
             <ProtectedRoute>
               <Tickets />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/reports" 
+        <Route
+          path="/reports"
           element={
             <ProtectedRoute>
               <ComingSoon />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/contest" 
+        <Route
+          path="/claims"
+          element={
+            <ProtectedRoute>
+              <PettyCashManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/contest"
           element={
             <ProtectedRoute>
               <ComingSoon />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/task" 
+        <Route
+          path="/task"
           element={
             <ProtectedRoute>
               <TasksKanbanPage />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/hrms" 
+        <Route
+          path="/hrms"
+          element={
+            <ProtectedRoute>
+              <HRMS />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/announcement"
           element={
             <ProtectedRoute>
               <ComingSoon />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/announcement" 
+        <Route
+          path="/settings"
           element={
             <ProtectedRoute>
               <ComingSoon />
             </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/settings" 
-          element={
-            <ProtectedRoute>
-              <ComingSoon />
-            </ProtectedRoute>
-          } 
+          }
         />
 
         <Route path="/" element={<Navigate to={isAuthenticated ? getDefaultRoute(user?.role) : "/login"} />} />

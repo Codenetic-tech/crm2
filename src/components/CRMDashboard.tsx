@@ -1,39 +1,25 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Users, Mail, Phone, Calendar, Filter, Search, Download, 
-  Plus, MoreVertical, Eye, Edit, Trash2, ChevronDown,
-  Building2, User, MailIcon, PhoneIcon, MessageCircle,
-  Activity, CheckSquare, FileText, ArrowUpRight, ArrowDownRight,
-  IndianRupee, RefreshCw, TrendingUp, Check,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wifi, WifiOff,
-  BookText,
-  CalendarCheck,
-  Clock,
-  ChevronsUpDown,
-  ArrowUpDown,
-  Menu,
-  X,
-  PhoneMissed,
-  SquareUserRound,
-  UserCheck,
-  MessageSquare,
-  XCircle,
-  Send
+import {
+  Users, User, PhoneIcon, MessageCircle,
+  Check, Wifi, WifiOff,
+  Clock, ChevronsUpDown, ArrowUpDown, ChevronDown,
+  MoreVertical, RefreshCw, CalendarCheck, PhoneMissed, CheckSquare,
+  Building2, Search, Filter
 } from 'lucide-react';
 import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { Tooltip } from '@radix-ui/react-tooltip';
 
 // Import the actual useAuth hook and fetchLeads function
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchLeads, refreshLeads, type Lead, clearAllCache } from '@/utils/crm';
-import { PathBreadcrumb } from './PathBreadcrumb';
-import { SummaryCard, SummaryCardsGrid } from './SummaryCard';
+import { SummaryCard } from './SummaryCard';
 import { AddLeadDialog } from './AddLeadDialog';
-import CommentModal from '@/components/CRM/CommentModal'; // Import the new CommentModal component
+import CommentModal from '@/components/CRM/CommentModal';
 
 // Import shadcn table components
 import {
@@ -41,7 +27,6 @@ import {
   ColumnFiltersState,
   SortingState,
   VisibilityState,
-  flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
@@ -51,19 +36,9 @@ import {
 } from "@tanstack/react-table"
 
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-
-import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -87,43 +62,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { Tooltip } from '@radix-ui/react-tooltip';
 
-interface SummaryData {
-  totalLeads: number;
-  newLeads: number;
-  contactedLeads: number;
-  followup: number;
-  qualifiedLeads: number;
-  totalValue: number;
-  conversionRate: number;
-  notinterested: number;
-  existingclient: number;
-  rnr?: number;
-  callback?: number;
-  switchoff?: number;
-  won?: number;
-}
-
-const statusOptions = [
-  { value: 'new', label: 'New', color: 'bg-blue-100 text-blue-800' },
-  //{ value: 'Contacted', label: 'Contacted', color: 'bg-purple-100 text-purple-800' },
-  { value: 'followup', label: 'Followup', color: 'bg-yellow-100 text-yellow-800' },
-  //{ value: 'qualified', label: 'Qualified', color: 'bg-green-100 text-green-800' },
-  { value: 'Not Interested', label: 'Not Interested', color: 'bg-red-100 text-red-800' },
-  { value: 'Call Back', label: 'Call Back', color: 'bg-orange-100 text-orange-800' },
-  { value: 'Switch off', label: 'Switch off', color: 'bg-gray-100 text-gray-800' },
-  { value: 'RNR', label: 'RNR', color: 'bg-indigo-100 text-indigo-800' },
-];
+// Import Refactored Components
+import {
+  CampaignFilter,
+  SourceFilter,
+  AssignedUserFilter,
+  statusOptions,
+  getStatusColor
+} from './Filters';
+import { DashboardTable } from './DashboardTable';
+import {
+  MobileHeader,
+  MobileSearchBar,
+  MobileFilterPanel,
+  MobileFiltersModal,
+  MobileColumnVisibilityModal,
+  MobileMenu,
+  MobileLeadList,
+  SummaryData
+} from './MobileView';
 
 // Rate limiting constants
-const REFRESH_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes in milliseconds
+const REFRESH_COOLDOWN_MS = 30 * 1000; // 30 seconds in milliseconds
 
 // Custom filter functions for TanStack Table
 const globalFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string) => {
   const search = filterValue.toLowerCase();
   const lead = row.original;
-  
+
   return (
     lead.name?.toLowerCase().includes(search) ||
     lead.company?.toLowerCase().includes(search) ||
@@ -148,18 +115,12 @@ const campaignFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string) =>
   return campaign.toLowerCase().includes(filterValue.toLowerCase());
 };
 
-const sourceFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string) => {
-  if (!filterValue || filterValue === 'all') return true;
-  const campaign = row.original.source || '';
-  return campaign.toLowerCase().includes(filterValue.toLowerCase());
-};
-
 const assignedUserFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string) => {
   if (!filterValue || filterValue === 'all') return true;
   const assignData = row.original._assign as string;
   try {
     const assignedUsers = JSON.parse(assignData || "[]") as string[];
-    return assignedUsers.some(user => 
+    return assignedUsers.some(user =>
       user.toLowerCase().includes(filterValue.toLowerCase())
     );
   } catch {
@@ -170,9 +131,9 @@ const assignedUserFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string
 const CRMDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  
+
   const [leads, setLeads] = useState<Lead[]>([]);
-  
+
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
@@ -219,7 +180,7 @@ const CRMDashboard: React.FC = () => {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'createdAt', desc: true }]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
-  
+
   // 1. Fix the initial state to load from localStorage
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
     if (typeof window !== 'undefined') {
@@ -249,7 +210,7 @@ const CRMDashboard: React.FC = () => {
   }, [columnVisibility]);
 
   const [rowSelection, setRowSelection] = useState({});
-  
+
 
   // Get actual user credentials from auth context
   const employeeId = user?.employeeId || '';
@@ -260,7 +221,7 @@ const CRMDashboard: React.FC = () => {
   const getDisplayName = (email: string) => {
     if (email === 'all') return 'All Users';
     const namePart = email.split('@')[0];
-    return namePart.split('.').map(part => 
+    return namePart.split('.').map(part =>
       part.charAt(0).toUpperCase() + part.slice(1)
     ).join(' ');
   };
@@ -275,7 +236,7 @@ const CRMDashboard: React.FC = () => {
 
   const postComment = React.useCallback(async () => {
     if (!selectedLeadForComment || !newComment.trim()) return;
-    
+
     setIsPostingComment(true);
     try {
       const response = await fetch('https://n8n.gopocket.in/webhook/hrms', {
@@ -299,12 +260,12 @@ const CRMDashboard: React.FC = () => {
       // Clear the form and close modal
       setNewComment('');
       setIsCommentModalOpen(false);
-      
+
       // Refresh the data
       handleClearCacheAndRefresh();
-      
+
       console.log('Comment posted successfully');
-      
+
     } catch (error: any) {
       console.error('Error posting comment:', error);
       setError(`Failed to post comment: ${error.message}`);
@@ -330,7 +291,7 @@ const CRMDashboard: React.FC = () => {
       value: campaign,
       label: campaign
     }));
-    
+
     return [{ value: 'all', label: 'All Campaigns' }, ...campaigns];
   }, [leads]);
 
@@ -345,7 +306,7 @@ const CRMDashboard: React.FC = () => {
       value: source,
       label: source
     }));
-    
+
     return [{ value: 'all', label: 'All Source' }, ...source];
   }, [leads]);
 
@@ -363,32 +324,14 @@ const CRMDashboard: React.FC = () => {
         // ignore parsing errors
       }
     });
-    
+
     const userOptions = Array.from(users).sort().map(user => ({
       value: user,
       label: getDisplayName(user)
     }));
-    
+
     return [{ value: 'all', label: 'All Users' }, ...userOptions];
   }, [leads]);
-
-  // Get status color
-  const getStatusColor = (status: Lead['status']) => {
-    const colors = {
-      new: 'bg-blue-100 text-blue-800',
-      Contacted: 'bg-purple-100 text-purple-800',
-      qualified: 'bg-green-100 text-green-800',
-      followup: 'bg-yellow-100 text-yellow-800',
-      negotiation: 'bg-orange-100 text-orange-800',
-      won: 'bg-emerald-100 text-emerald-800',
-      lost: 'bg-red-100 text-red-800',
-      'Not Interested': 'bg-red-100 text-red-800',
-      'Call Back': 'bg-orange-100 text-orange-800',
-      'Switch off': 'bg-gray-100 text-gray-800',
-      'RNR': 'bg-indigo-100 text-indigo-800'
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800';
-  };
 
   // Update the column definitions with consistent styling
   const columns: ColumnDef<Lead>[] = [
@@ -630,7 +573,7 @@ const CRMDashboard: React.FC = () => {
           <TooltipProvider delayDuration={0}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div 
+                <div
                   className="truncate max-w-[160px] inline-block cursor-default text-sm text-gray-900 hover:bg-gray-50 px-2 py-1 rounded"
                 >
                   <div className="flex items-center gap-2">
@@ -767,7 +710,7 @@ const CRMDashboard: React.FC = () => {
         return (
           <div className="flex items-center gap-2">
             <div className="relative">
-              <button 
+              <button
                 className="p-1 sm:p-2 text-gray-400 hover:text-gray-600 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -781,7 +724,7 @@ const CRMDashboard: React.FC = () => {
                   <MoreVertical size={16} />
                 )}
               </button>
-              
+
               {openDropdown === lead.id && (
                 <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1 hidden lg:block">
                   {/* Add Comment Button at the top */}
@@ -796,16 +739,15 @@ const CRMDashboard: React.FC = () => {
                     <MessageCircle size={14} className="text-blue-500" />
                     <span className="font-normal">Add Comment</span>
                   </button>
-                  
+
                   <div className="px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-100">
                     Change Status
                   </div>
                   {statusOptions.map((status) => (
                     <button
                       key={status.value}
-                      className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between hover:bg-gray-50 ${
-                        lead.status === status.value ? 'bg-blue-50' : ''
-                      }`}
+                      className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between hover:bg-gray-50 ${lead.status === status.value ? 'bg-blue-50' : ''
+                        }`}
                       onClick={(e) => {
                         e.stopPropagation();
                         changeLeadStatus(lead.id, status.value, lead.name);
@@ -833,8 +775,8 @@ const CRMDashboard: React.FC = () => {
 
   // Filter leads to only include relevant statuses
   const filteredLeads = useMemo(() => {
-    return leads.filter(lead => 
-      ['new', 'Contacted', 'qualified', 'followup', 'Not Interested', 'Call Back', 'Switch off', 'RNR'].includes(lead.status)
+    return leads.filter(lead =>
+      ['new', 'Contacted', 'qualified', 'followup', 'Not Interested', 'Call Back', 'Switch off', 'RNR', 'won'].includes(lead.status)
     );
   }, [leads]);
 
@@ -891,13 +833,13 @@ const CRMDashboard: React.FC = () => {
     if (!lastRefreshTime) return true;
     const timeSinceLastRefresh = Date.now() - lastRefreshTime;
     const canRefreshNow = timeSinceLastRefresh >= REFRESH_COOLDOWN_MS;
-    
+
     if (canRefreshNow && cooldownIntervalRef.current) {
       clearInterval(cooldownIntervalRef.current);
       cooldownIntervalRef.current = null;
       setCooldownRemaining(0);
     }
-    
+
     return canRefreshNow;
   }, [lastRefreshTime, cooldownRemaining]);
 
@@ -920,15 +862,15 @@ const CRMDashboard: React.FC = () => {
       clearInterval(cooldownIntervalRef.current);
       cooldownIntervalRef.current = null;
     }
-    
+
     if (lastRefreshTime && !canRefresh) {
       const initialRemaining = getCooldownRemaining();
       setCooldownRemaining(initialRemaining);
-      
+
       cooldownIntervalRef.current = setInterval(() => {
         const remaining = getCooldownRemaining();
         setCooldownRemaining(remaining);
-        
+
         if (remaining <= 0) {
           if (cooldownIntervalRef.current) {
             clearInterval(cooldownIntervalRef.current);
@@ -953,7 +895,7 @@ const CRMDashboard: React.FC = () => {
   const changeLeadStatus = async (leadId: string, newStatus: string, leadName: string) => {
     setIsChangingStatus(leadId);
     setOpenDropdown(null);
-    
+
     try {
       const response = await fetch('https://n8n.gopocket.in/webhook/hrms', {
         method: 'POST',
@@ -978,16 +920,16 @@ const CRMDashboard: React.FC = () => {
       const result = await response.json();
       console.log('Status change response:', result);
 
-      setLeads(prevLeads => 
-        prevLeads.map(lead => 
-          lead.id === leadId 
+      setLeads(prevLeads =>
+        prevLeads.map(lead =>
+          lead.id === leadId
             ? { ...lead, status: newStatus as Lead['status'] }
             : lead
         )
       );
 
       console.log(`Status changed to ${newStatus} for lead: ${leadName}`);
-      
+
     } catch (error: any) {
       console.error('Error changing lead status:', error);
       setError(`Failed to change status: ${error.message}`);
@@ -1001,7 +943,7 @@ const CRMDashboard: React.FC = () => {
   const handleBulkAssign = async () => {
     const selectedLeads = table.getFilteredSelectedRowModel().rows.map(row => row.original.id);
     if (!selectedTeamMember || selectedLeads.length === 0) return;
-    
+
     setIsAssigning(true);
     try {
       const response = await fetch('https://n8n.gopocket.in/webhook/hrms', {
@@ -1051,7 +993,7 @@ const CRMDashboard: React.FC = () => {
             <span className="text-blue-800 font-medium text-sm sm:text-base">
               {selectedLeads.length} lead{selectedLeads.length !== 1 ? 's' : ''} selected
             </span>
-            
+
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -1117,147 +1059,6 @@ const CRMDashboard: React.FC = () => {
     );
   };
 
-  // Campaign Filter Combobox
-  const CampaignFilter = () => {
-    return (
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            className="w-full sm:w-[260px] justify-between"
-          >
-            {selectedCampaign
-              ? campaignOptions.find((campaign) => campaign.value === selectedCampaign)?.label
-              : "Select campaign..."}
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-full sm:w-[260px] p-0">
-          <Command>
-            <CommandInput placeholder="Search campaign..." />
-            <CommandList>
-              <CommandEmpty>No campaign found.</CommandEmpty>
-              <CommandGroup>
-                {campaignOptions.map((campaign) => (
-                  <CommandItem
-                    key={campaign.value}
-                    value={campaign.value}
-                    onSelect={(currentValue) => {
-                      setSelectedCampaign(currentValue === selectedCampaign ? "" : currentValue);
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        selectedCampaign === campaign.value ? "opacity-100" : "opacity-0"
-                      )}
-                    />
-                    {campaign.label}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-    );
-  };
-
-   // Source Filter Combobox
-  const SourceFilter = () => {
-    return (
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            className="w-full sm:w-[200px] justify-between"
-          >
-            {selectedSource
-              ? sourceOptions.find((source) => source.value === selectedSource)?.label
-              : "Select Source..."}
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-full sm:w-[200px] p-0">
-          <Command>
-            <CommandInput placeholder="Search Source..." />
-            <CommandList>
-              <CommandEmpty>No source found.</CommandEmpty>
-              <CommandGroup>
-                {sourceOptions.map((source) => (
-                  <CommandItem
-                    key={source.value}
-                    value={source.value}
-                    onSelect={(currentValue) => {
-                      setSelectedSource(currentValue === selectedSource ? "" : currentValue);
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        selectedSource === source.value ? "opacity-100" : "opacity-0"
-                      )}
-                    />
-                    {source.label}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-    );
-  };
-
-  // Assigned User Filter Combobox
-  const AssignedUserFilter = () => {
-    return (
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            className="w-full sm:w-[200px] justify-between"
-          >
-            {selectedAssignedUser
-              ? assignedUserOptions.find((user) => user.value === selectedAssignedUser)?.label
-              : "Select user..."}
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-full sm:w-[200px] p-0">
-          <Command>
-            <CommandInput placeholder="Search user..." />
-            <CommandList>
-              <CommandEmpty>No user found.</CommandEmpty>
-              <CommandGroup>
-                {assignedUserOptions.map((user) => (
-                  <CommandItem
-                    key={user.value}
-                    value={user.value}
-                    onSelect={(currentValue) => {
-                      setSelectedAssignedUser(currentValue === selectedAssignedUser ? "" : currentValue);
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        selectedAssignedUser === user.value ? "opacity-100" : "opacity-0"
-                      )}
-                    />
-                    {user.label}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-    );
-  };
-
   // Fetch all leads function
   const fetchAllLeads = async (isAutoRefresh = false, isManualRefresh = false) => {
     try {
@@ -1270,35 +1071,35 @@ const CRMDashboard: React.FC = () => {
       } else {
         setIsInitialLoading(true);
       }
-      
+
       setError(null);
-      
+
       const apiLeads = await fetchLeads(employeeId, email, user.team);
-      
+
       if (isAutoRefresh && lastFetchedData.current.length > 0) {
         // Incremental update logic
         const currentDataMap = new Map(lastFetchedData.current.map(lead => [lead.id, getLeadContentHash(lead)]));
         const newDataMap = new Map(apiLeads.map(lead => [lead.id, getLeadContentHash(lead)]));
-        
+
         let newCount = 0;
         let modifiedCount = 0;
-        
+
         const cleanCurrentData = lastFetchedData.current.map(lead => ({
           ...lead,
           _isNew: false,
           _isModified: false
         }));
-        
+
         const currentDataById = new Map(cleanCurrentData.map(lead => [lead.id, lead]));
-        
+
         const updatedLeads: Lead[] = [];
-        
+
         apiLeads.forEach(newLead => {
           const leadId = newLead.id;
           const newContentHash = newDataMap.get(leadId);
           const oldContentHash = currentDataMap.get(leadId);
           const existingLead = currentDataById.get(leadId);
-          
+
           if (!existingLead) {
             newLead._isNew = true;
             updatedLeads.push(newLead);
@@ -1311,23 +1112,23 @@ const CRMDashboard: React.FC = () => {
             updatedLeads.push(existingLead);
           }
         });
-        
+
         updatedLeads.sort((a, b) => {
           const timeA = new Date(a.createdAt).getTime();
           const timeB = new Date(b.createdAt).getTime();
           return timeB - timeA;
         });
-        
+
         setLeads(updatedLeads);
         lastFetchedData.current = updatedLeads.map(lead => ({
           ...lead,
           _isNew: false,
           _isModified: false
         }));
-        
+
         setNewRecordsCount(newCount);
         setModifiedRecordsCount(modifiedCount);
-        
+
         setTimeout(() => {
           setLeads(prev => prev.map(lead => ({
             ...lead,
@@ -1335,7 +1136,7 @@ const CRMDashboard: React.FC = () => {
             _isModified: false
           })));
         }, 5000);
-        
+
         setConnectionStatus('connected');
       } else {
         // Full refresh for initial load
@@ -1344,14 +1145,14 @@ const CRMDashboard: React.FC = () => {
           const timeB = new Date(b.createdAt).getTime();
           return timeB - timeA;
         });
-        
+
         setLeads(sortedLeads);
         lastFetchedData.current = sortedLeads;
         setNewRecordsCount(0);
         setModifiedRecordsCount(0);
         setConnectionStatus('connected');
       }
-      
+
       setLastUpdated(new Date());
     } catch (error: any) {
       console.error('Error fetching leads:', error);
@@ -1388,7 +1189,7 @@ const CRMDashboard: React.FC = () => {
   // Modified clear cache and refresh function
   const handleClearCacheAndRefresh = async () => {
     if (!employeeId || !email) return;
-    
+
     clearAllCache();
     await refreshLeads(employeeId, email, user.team);
     await fetchAllLeads(false, true);
@@ -1406,7 +1207,7 @@ const CRMDashboard: React.FC = () => {
     if (autoRefreshTimeoutRef.current) {
       clearTimeout(autoRefreshTimeoutRef.current);
     }
-    
+
     if (autoRefresh && !isInitialLoading && employeeId && email) {
       const scheduleNextRefresh = () => {
         autoRefreshTimeoutRef.current = setTimeout(() => {
@@ -1415,10 +1216,10 @@ const CRMDashboard: React.FC = () => {
           });
         }, refreshInterval * 1000);
       };
-      
+
       scheduleNextRefresh();
     }
-    
+
     return () => {
       if (autoRefreshTimeoutRef.current) {
         clearTimeout(autoRefreshTimeoutRef.current);
@@ -1430,7 +1231,7 @@ const CRMDashboard: React.FC = () => {
   const summaryData: SummaryData = useMemo(() => {
     // Get the currently filtered leads from the table
     const filteredLeads = table.getFilteredRowModel().rows.map(row => row.original);
-    
+
     if (isInitialLoading && filteredLeads.length === 0) {
       return {
         totalLeads: 0,
@@ -1452,7 +1253,7 @@ const CRMDashboard: React.FC = () => {
     return {
       totalLeads: filteredLeads.length,
       existingclient: leads.filter(lead => lead.status === 'won').length,
-      won: leads.filter(lead => lead.status === 'won').length,
+      won: filteredLeads.filter(lead => lead.status === 'won').length,
       newLeads: filteredLeads.filter(lead => lead.status === 'new').length,
       contactedLeads: filteredLeads.filter(lead => lead.status === 'Contacted').length,
       rnr: filteredLeads.filter(lead => lead.status === 'RNR').length,
@@ -1499,44 +1300,25 @@ const CRMDashboard: React.FC = () => {
     const isRefreshing = isManualRefreshing || isAutoRefreshing;
     const isDisabled = !canRefresh || isRefreshing || isInitialLoading;
 
-    let buttonContent;
-    if (isRefreshing) {
-      buttonContent = (
-        <>
-          <RefreshCw size={16} className="animate-spin" />
-          Refreshing...
-        </>
-      );
-    } else if (!canRefresh && cooldownRemaining > 0) {
-      buttonContent = (
-        <>
-          <Clock size={16} />
-          {formatCooldownTime(cooldownRemaining)}
-        </>
-      );
-    } else {
-      buttonContent = (
-        <>
-          <RefreshCw size={16} />
-          Refresh
-        </>
-      );
-    }
+    const buttonContent = isRefreshing ? (
+      <>
+        <RefreshCw size={16} className="animate-spin" />
+        Refreshing...
+      </>
+    ) : (
+      <>
+        <RefreshCw size={16} />
+      </>
+    );
 
     return (
-      <button 
+      <button
         onClick={handleRateLimitedRefresh}
         disabled={isDisabled}
-        className="px-4 py-2 text-gray-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-all flex items-center gap-2 justify-center text-sm disabled:opacity-50 disabled:cursor-not-allowed relative group shadow-sm hover:shadow-md"
-        title={!canRefresh ? `Available in ${formatCooldownTime(cooldownRemaining)}` : 'Refresh leads'}
+        className="px-4 py-2 text-gray-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-all flex items-center gap-2 justify-center text-sm disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+        title={isRefreshing ? 'Refreshing...' : isDisabled ? 'Please wait before refreshing again' : 'Refresh leads'}
       >
         {buttonContent}
-        
-        {!canRefresh && cooldownRemaining > 0 && (
-          <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap shadow-lg z-10">
-            Available in {formatCooldownTime(cooldownRemaining)}
-          </div>
-        )}
       </button>
     );
   };
@@ -1551,444 +1333,6 @@ const CRMDashboard: React.FC = () => {
       document.removeEventListener('click', handleClickOutside);
     };
   }, []);
-
-  // New Mobile Lead Row Component using TanStack Table
-  const MobileLeadRow = ({ row }: { row: any }) => {
-    const lead = row.original;
-    
-    return (
-      <div 
-        className={`bg-white border border-gray-200 rounded-lg p-4 mb-3 hover:shadow-md transition-shadow cursor-pointer ${
-          lead._isNew ? 'bg-green-50 border-l-4 border-green-400' : 
-          lead._isModified ? 'bg-blue-50 border-l-4 border-blue-400' : ''
-        }`}
-        onClick={() => handleLeadClick(lead.id)}
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-3 flex-1">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-              {lead.name.split(' ').map(n => n[0]).join('')}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-gray-900 truncate text-sm">{lead.name}</p>
-              {lead.ucc && (
-                <p className="text-xs text-gray-400 truncate">UCC: {lead.ucc}</p>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(lead.status)}`}>
-              {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
-            </span>
-            <button 
-              className="p-1 text-gray-400 hover:text-gray-600"
-              onClick={(e) => toggleDropdown(lead.id, e)}
-              disabled={isChangingStatus === lead.id}
-            >
-              {isChangingStatus === lead.id ? (
-                <RefreshCw size={16} className="animate-spin" />
-              ) : (
-                <MoreVertical size={16} />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Contact Info */}
-        <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-          <div className="flex items-center gap-2">
-            <PhoneIcon size={14} className="text-gray-400" />
-            <span className="text-gray-700 truncate">{lead.phone}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Building2 size={14} className="text-gray-400" />
-            <span className="text-gray-700 truncate">{lead.city || 'N/A'}</span>
-          </div>
-        </div>
-
-        {/* Source and Campaign */}
-        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-          <span className="truncate">Source: {lead.source}</span>
-          <span className="truncate ml-2">Campaign: {lead.campaign || 'N/A'}</span>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between text-xs text-gray-500 border-t border-gray-100 pt-2">
-          <span>Created: {new Date(lead.createdAt).toLocaleDateString('en-GB')}</span>
-          <span>Modified: {lead.lastActivity}</span>
-        </div>
-
-        {/* Assignees */}
-        <div className="flex items-center justify-between mt-2">
-          <div className="flex -space-x-2">
-            {JSON.parse(lead._assign || "[]")
-              .filter((user: string) => user !== "gokul.krishna.687@gopocket.in")
-              .map((user: string, index: number) => {
-                const firstLetter = user.charAt(0).toUpperCase();
-                return (
-                  <div key={index} className="relative group">
-                    <div
-                      className="w-6 h-6 flex items-center justify-center rounded-full bg-blue-500 text-white text-xs font-semibold border-2 border-white"
-                      title={user}
-                    >
-                      {firstLetter}
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-
-        {/* Mobile Status Change Modal */}
-        {openDropdown === lead.id && (
-          <>
-            {/* Backdrop */}
-            <div 
-              className="fixed inset-0 bg-black bg-opacity-50 z-50 lg:hidden"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenDropdown(null);
-              }}
-            />
-            
-            {/* Modal */}
-            <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 lg:hidden animate-slide-up max-h-[80vh] overflow-hidden w-full">
-              <div className="p-4 border-b border-gray-200">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold truncate pr-2">Change Status for {lead.name}</h3>
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOpenDropdown(null);
-                    }}
-                    className="p-1 flex-shrink-0"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-              </div>
-              
-              <div className="overflow-y-auto max-h-[60vh]">
-                {statusOptions.map((status) => (
-                  <button
-                    key={status.value}
-                    className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between hover:bg-gray-50 ${
-                      lead.status === status.value ? 'bg-blue-50' : ''
-                    }`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      changeLeadStatus(lead.id, status.value, lead.name);
-                    }}
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className={`w-3 h-3 rounded-full ${status.color.split(' ')[0]} flex-shrink-0`} />
-                      <span className="font-medium truncate">{status.label}</span>
-                    </div>
-                    {lead.status === status.value && (
-                      <Check size={18} className="text-blue-600 flex-shrink-0 ml-2" />
-                    )}
-                  </button>
-                ))}
-              </div>
-              
-              <div className="p-4 border-t border-gray-200 bg-white">
-                <button
-                  className="w-full text-center py-3 text-gray-500 hover:text-gray-700 font-medium"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpenDropdown(null);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    );
-  };
-
-  // Enhanced loading state
-  const LoadingState = () => (
-    <div className="text-center py-12">
-      <RefreshCw className="mx-auto h-8 w-8 animate-spin text-blue-500 mb-4" />
-      <p className="text-gray-600">Loading leads...</p>
-    </div>
-  );
-
-  // Enhanced empty state
-  const EmptyState = () => (
-    <div className="text-center py-12">
-      <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-      <h3 className="text-lg font-medium text-gray-900 mb-2">No leads assigned to you</h3>
-      <p className="text-gray-600 mb-6">You don't have any leads assigned to you at the moment.</p>
-      <AddLeadDialog onLeadAdded={handleLeadAdded} />
-    </div>
-  );
-
-  // Enhanced no results state
-  const NoResultsState = () => (
-    <div className="text-center py-12">
-      <Search className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-      <h3 className="text-lg font-medium text-gray-900 mb-2">No matching leads found</h3>
-      <p className="text-gray-600">Try adjusting your search or filters to find what you're looking for.</p>
-    </div>
-  );
-
-  // Mobile Search Bar
-  const MobileSearchBar = () => (
-    <div className="lg:hidden bg-white rounded-lg p-4 mb-4 border border-gray-200">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-        <Input
-          type="text"
-          placeholder="Search all leads..."
-          value={globalFilter ?? ''}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-          className="w-full pl-10"
-        />
-      </div>
-    </div>
-  );
-
-  // Mobile Filter Panel
-  const MobileFilterPanel = () => (
-    <div className="lg:hidden bg-white rounded-lg p-4 mb-4 border border-gray-200">
-      <div className="flex gap-2 mb-3">
-        <button
-          onClick={() => setMobileFilterOpen(true)}
-          className="flex-1 bg-blue-50 text-blue-700 py-2 px-3 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
-        >
-          <Filter size={16} />
-          Filters
-        </button>
-        <button
-          onClick={() => setMobileColumnVisibilityOpen(true)}
-          className="flex-1 bg-gray-50 text-gray-700 py-2 px-3 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
-        >
-          <Eye size={16} />
-          Columns
-        </button>
-      </div>
-
-      {/* Active Filters Display */}
-      <div className="flex flex-wrap gap-2">
-        {selectedCampaign && selectedCampaign !== 'all' && (
-          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs flex items-center gap-1">
-            Campaign: {campaignOptions.find(c => c.value === selectedCampaign)?.label}
-            <button onClick={() => setSelectedCampaign('')}>×</button>
-          </span>
-        )}
-        {selectedSource && selectedSource !== 'all' && (
-          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs flex items-center gap-1">
-            source: {sourceOptions.find(c => c.value === selectedSource)?.label}
-            <button onClick={() => setSelectedSource('')}>×</button>
-          </span>
-        )}
-        {selectedAssignedUser && selectedAssignedUser !== 'all' && (
-          <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs flex items-center gap-1">
-            User: {assignedUserOptions.find(u => u.value === selectedAssignedUser)?.label}
-            <button onClick={() => setSelectedAssignedUser('')}>×</button>
-          </span>
-        )}
-        {table.getColumn('status')?.getFilterValue() && (
-          <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs flex items-center gap-1">
-            Status: {statusOptions.find(s => s.value === table.getColumn('status')?.getFilterValue())?.label}
-            <button onClick={() => table.getColumn('status')?.setFilterValue('')}>×</button>
-          </span>
-        )}
-      </div>
-    </div>
-  );
-
-  // Mobile Filters Modal
-  const MobileFiltersModal = () => (
-    <>
-      {mobileFilterOpen && (
-        <>
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-            onClick={() => setMobileFilterOpen(false)}
-          />
-          
-          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 lg:hidden animate-slide-up max-h-[80vh] overflow-hidden">
-            <div className="p-4 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Filters</h3>
-                <button 
-                  onClick={() => setMobileFilterOpen(false)}
-                  className="p-1"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-            
-            <div className="overflow-y-auto max-h-[60vh] p-4 space-y-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Campaign</label>
-                <CampaignFilter />
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Assigned User</label>
-                <AssignedUserFilter />
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Status</label>
-                <div className="space-y-2">
-                  {statusOptions.map((status) => (
-                    <button
-                      key={status.value}
-                      className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between ${
-                        table.getColumn('status')?.getFilterValue() === status.value 
-                          ? 'bg-blue-50 border border-blue-200' 
-                          : 'bg-gray-50 hover:bg-gray-100'
-                      }`}
-                      onClick={() => {
-                        table.getColumn('status')?.setFilterValue(
-                          table.getColumn('status')?.getFilterValue() === status.value ? '' : status.value
-                        );
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${status.color.split(' ')[0]}`} />
-                        <span className="text-sm">{status.label}</span>
-                      </div>
-                      {table.getColumn('status')?.getFilterValue() === status.value && (
-                        <Check size={16} className="text-blue-600" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            
-            <div className="p-4 border-t border-gray-200 bg-white">
-              <button
-                className="w-full text-center py-3 bg-blue-600 text-white rounded-lg font-medium"
-                onClick={() => setMobileFilterOpen(false)}
-              >
-                Apply Filters
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-    </>
-  );
-
-  // Mobile Column Visibility Modal
-  const MobileColumnVisibilityModal = () => (
-    <>
-      {mobileColumnVisibilityOpen && (
-        <>
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-            onClick={() => setMobileColumnVisibilityOpen(false)}
-          />
-          
-          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 lg:hidden animate-slide-up max-h-[80vh] overflow-hidden">
-            <div className="p-4 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Visible Columns</h3>
-                <button 
-                  onClick={() => setMobileColumnVisibilityOpen(false)}
-                  className="p-1"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-            
-            <div className="overflow-y-auto max-h-[60vh] p-4">
-              {table
-                .getAllColumns()
-                .filter((column) => column.getCanHide())
-                .map((column) => {
-                  return (
-                    <div
-                      key={column.id}
-                      className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0"
-                    >
-                      <span className="text-sm font-medium capitalize">
-                        {column.id === '_assign' ? 'Assigned To' : 
-                         column.id === 'lastActivity' ? 'Last Modified' :
-                         column.id}
-                      </span>
-                      <Checkbox
-                        checked={column.getIsVisible()}
-                        onCheckedChange={(value) =>
-                          column.toggleVisibility(!!value)
-                        }
-                        className="h-5 w-5"
-                      />
-                    </div>
-                  )
-                })}
-            </div>
-            
-            <div className="p-4 border-t border-gray-200 bg-white">
-              <button
-                className="w-full text-center py-3 bg-blue-600 text-white rounded-lg font-medium"
-                onClick={() => setMobileColumnVisibilityOpen(false)}
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-    </>
-  );
-
-  // Mobile Header Component
-  const MobileHeader = () => (
-    <div className="lg:hidden bg-white border-b border-gray-200 sticky top-0 z-30">
-      <div className="flex items-center justify-between p-4">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setMobileMenuOpen(true)}
-            className="p-2 hover:bg-gray-100 rounded-lg"
-          >
-            <Menu size={20} />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">GoPocket</h1>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Stats Bar */}
-      <div className="px-4 pb-3">
-        <div className="flex items-center justify-between text-xs">
-          <div className="text-center flex-1">
-            <div className="font-semibold text-blue-600">{summaryData.totalLeads}</div>
-            <div className="text-gray-500">Total</div>
-          </div>
-          <div className="text-center flex-1">
-            <div className="font-semibold text-green-600">{summaryData.newLeads}</div>
-            <div className="text-gray-500">New</div>
-          </div>
-          <div className="text-center flex-1">
-            <div className="font-semibold text-purple-600">{summaryData.contactedLeads}</div>
-            <div className="text-gray-500">Contacted</div>
-          </div>
-          <div className="text-center flex-1">
-            <div className="font-semibold text-yellow-600">{summaryData.followup}</div>
-            <div className="text-gray-500">Followup</div>
-          </div>
-          <div className="text-center flex-1">
-            <div className="font-semibold text-indigo-600">{summaryData.qualifiedLeads}</div>
-            <div className="text-gray-500">Qualified</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -2006,7 +1350,7 @@ const CRMDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen ml-[30px]">
+    <div className="lg:pl-6">
       {/* Comment Modal */}
       <CommentModal
         isOpen={isCommentModalOpen}
@@ -2019,8 +1363,8 @@ const CRMDashboard: React.FC = () => {
       />
 
       {/* Mobile Header */}
-      <MobileHeader />
-  
+      <MobileHeader setMobileMenuOpen={setMobileMenuOpen} summaryData={summaryData} />
+
       {/* Desktop Header - Hidden on mobile */}
       <div className="hidden lg:flex flex-row items-center justify-between gap-4 mb-8">
         <div className="flex-1 min-w-0">
@@ -2065,10 +1409,10 @@ const CRMDashboard: React.FC = () => {
             <option value={600}>10 min</option>
             <option value={900}>15 min</option>
           </select>
-          
+
           {/* Use the new RefreshButton component */}
           <RefreshButton />
-          
+
           <AddLeadDialog onLeadAdded={handleLeadAdded} />
         </div>
       </div>
@@ -2089,34 +1433,61 @@ const CRMDashboard: React.FC = () => {
           title="New Leads" value={summaryData.newLeads} icon={User} color="blue" shadowColor="blue" trend={{ value: 8.2, isPositive: true }} showTrend={true} className="h-full" />
 
         <SummaryCard
-          title="Followup" value={summaryData.followup} icon={CalendarCheck} color="blue" shadowColor="blue" trend={{ value: 22.1, isPositive: true }} 
+          title="Followup" value={summaryData.followup} icon={CalendarCheck} color="blue" shadowColor="blue" trend={{ value: 22.1, isPositive: true }}
           showTrend={true} className="h-full" />
 
         <SummaryCard
-          title="Other status" value={summaryData.contactedLeads + summaryData.rnr + summaryData.callback + summaryData.switchoff} icon={CalendarCheck} color="blue" shadowColor="blue" trend={{ value: 22.1, isPositive: true }} 
+          title="Other status" value={summaryData.contactedLeads + summaryData.rnr + summaryData.callback + summaryData.switchoff} icon={CalendarCheck} color="blue" shadowColor="blue" trend={{ value: 22.1, isPositive: true }}
           showTrend={true} className="h-full" />
 
         <SummaryCard
-          title="Not Interested" value={summaryData.notinterested} icon={PhoneMissed} color="red" shadowColor="red" trend={{ value: 8.1, isPositive: false }} 
+          title="Not Interested" value={summaryData.notinterested} icon={PhoneMissed} color="red" shadowColor="red" trend={{ value: 8.1, isPositive: false }}
           showTrend={true} className="h-full" />
-        
+
         <SummaryCard
           title="Won Leads" value={summaryData.won} icon={CheckSquare} color="green" shadowColor="green" trend={{ value: 15.3, isPositive: true }} showTrend={true} className="h-full" />
       </div>
-      
+
       {/* Bulk Actions Bar */}
       <BulkActionsBar />
-      
+
       {/* Mobile Search */}
-      <MobileSearchBar />
-      
+      <MobileSearchBar globalFilter={globalFilter} setGlobalFilter={setGlobalFilter} />
+
       {/* Mobile Filter Panel */}
-      <MobileFilterPanel />
-      
+      <MobileFilterPanel
+        setMobileFilterOpen={setMobileFilterOpen}
+        setMobileColumnVisibilityOpen={setMobileColumnVisibilityOpen}
+        selectedCampaign={selectedCampaign}
+        setSelectedCampaign={setSelectedCampaign}
+        selectedSource={selectedSource}
+        setSelectedSource={setSelectedSource}
+        selectedAssignedUser={selectedAssignedUser}
+        setSelectedAssignedUser={setSelectedAssignedUser}
+        table={table}
+        campaignOptions={campaignOptions}
+        sourceOptions={sourceOptions}
+        assignedUserOptions={assignedUserOptions}
+      />
+
       {/* Mobile Modals */}
-      <MobileFiltersModal />
-      <MobileColumnVisibilityModal />
-      
+      <MobileFiltersModal
+        mobileFilterOpen={mobileFilterOpen}
+        setMobileFilterOpen={setMobileFilterOpen}
+        selectedCampaign={selectedCampaign}
+        setSelectedCampaign={setSelectedCampaign}
+        selectedAssignedUser={selectedAssignedUser}
+        setSelectedAssignedUser={setSelectedAssignedUser}
+        table={table}
+        campaignOptions={campaignOptions}
+        assignedUserOptions={assignedUserOptions}
+      />
+      <MobileColumnVisibilityModal
+        mobileColumnVisibilityOpen={mobileColumnVisibilityOpen}
+        setMobileColumnVisibilityOpen={setMobileColumnVisibilityOpen}
+        table={table}
+      />
+
       {/* Desktop Filters */}
       <div className="hidden lg:block bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-100">
         <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
@@ -2133,21 +1504,33 @@ const CRMDashboard: React.FC = () => {
             </div>
 
             {/* Campaign Filter */}
-            <CampaignFilter />
+            <CampaignFilter
+              value={selectedCampaign}
+              onChange={setSelectedCampaign}
+              options={campaignOptions}
+            />
 
             {/* Source Filter */}
-            <SourceFilter />
+            <SourceFilter
+              value={selectedSource}
+              onChange={setSelectedSource}
+              options={sourceOptions}
+            />
 
             {/* Assigned User Filter */}
-            <AssignedUserFilter />
+            <AssignedUserFilter
+              value={selectedAssignedUser}
+              onChange={setSelectedAssignedUser}
+              options={assignedUserOptions}
+            />
 
             {/* Status Filter using TanStack Table */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="px-4 py-3">
                   <Filter className="mr-2 h-4 w-4" />
-                  Status: {table.getColumn('status')?.getFilterValue() ? 
-                    statusOptions.find(s => s.value === table.getColumn('status')?.getFilterValue())?.label : 
+                  Status: {table.getColumn('status')?.getFilterValue() ?
+                    statusOptions.find(s => s.value === table.getColumn('status')?.getFilterValue())?.label :
                     'All'}
                 </Button>
               </DropdownMenuTrigger>
@@ -2212,216 +1595,40 @@ const CRMDashboard: React.FC = () => {
       {/* Leads Table/List */}
       <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
         {/* Mobile View with TanStack Table */}
-        <div className="lg:hidden">
-          {isInitialLoading ? (
-            <LoadingState />
-          ) : leads.length === 0 ? (
-            <EmptyState />
-          ) : table.getRowModel().rows?.length === 0 ? (
-            <NoResultsState />
-          ) : (
-            <div className="p-4">
-              {table.getRowModel().rows.map((row) => (
-                <MobileLeadRow key={row.id} row={row} />
-              ))}
-            </div>
-          )}
-        </div>
+        <MobileLeadList
+          isInitialLoading={isInitialLoading}
+          leads={leads}
+          table={table}
+          handleLeadClick={handleLeadClick}
+          toggleDropdown={toggleDropdown}
+          isChangingStatus={isChangingStatus}
+          openDropdown={openDropdown}
+          setOpenDropdown={setOpenDropdown}
+          changeLeadStatus={changeLeadStatus}
+          onLeadAdded={handleLeadAdded}
+        />
 
         {/* Desktop View with TanStack Table */}
-        <div className="hidden lg:block">
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => {
-                    return (
-                      <TableHead key={header.id}>
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
-                            )}
-                      </TableHead>
-                    )
-                  })}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows?.length ? (
-                table.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    data-state={row.getIsSelected() && "selected"}
-                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${
-                      row.original._isNew ? 'bg-green-50 border-l-4 border-green-400' : 
-                      row.original._isModified ? 'bg-blue-50 border-l-4 border-blue-400' : ''
-                    }`}
-                    onClick={() => handleLeadClick(row.original.id)}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={columns.length} className="h-24 text-center">
-                    {isInitialLoading ? (
-                      <LoadingState />
-                    ) : leads.length === 0 ? (
-                      <EmptyState />
-                    ) : (
-                      <NoResultsState />
-                    )}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        {/* Pagination */}
-        {!isInitialLoading && leads.length > 0 && table.getRowModel().rows?.length > 0 && (
-          <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-t border-gray-200 bg-gray-50">
-            <div className="flex-1 text-sm text-muted-foreground">
-              {table.getFilteredSelectedRowModel().rows.length} of{" "}
-              {table.getFilteredRowModel().rows.length} row(s) selected.
-            </div>
-            <div className="flex items-center space-x-6 lg:space-x-8">
-              <div className="flex items-center space-x-2">
-                <p className="text-sm font-medium">Rows per page</p>
-                <select
-                  value={table.getState().pagination.pageSize}
-                  onChange={(e) => {
-                    table.setPageSize(Number(e.target.value))
-                  }}
-                  className="h-8 w-[70px] rounded-md border border-gray-300 bg-transparent text-sm"
-                >
-                  {[10, 20, 30, 40, 50, 100].map((pageSize) => (
-                    <option key={pageSize} value={pageSize}>
-                      {pageSize}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex w-[100px] items-center justify-center text-sm font-medium">
-                Page {table.getState().pagination.pageIndex + 1} of{" "}
-                {table.getPageCount()}
-              </div>
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  className="hidden h-8 w-8 p-0 lg:flex"
-                  onClick={() => table.setPageIndex(0)}
-                  disabled={!table.getCanPreviousPage()}
-                >
-                  <span className="sr-only">Go to first page</span>
-                  <ChevronsLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-8 w-8 p-0"
-                  onClick={() => table.previousPage()}
-                  disabled={!table.getCanPreviousPage()}
-                >
-                  <span className="sr-only">Go to previous page</span>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-8 w-8 p-0"
-                  onClick={() => table.nextPage()}
-                  disabled={!table.getCanNextPage()}
-                >
-                  <span className="sr-only">Go to next page</span>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  className="hidden h-8 w-8 p-0 lg:flex"
-                  onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-                  disabled={!table.getCanNextPage()}
-                >
-                  <span className="sr-only">Go to last page</span>
-                  <ChevronsRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+        <DashboardTable
+          table={table}
+          leads={leads}
+          isInitialLoading={isInitialLoading}
+          handleLeadClick={handleLeadClick}
+          onLeadAdded={handleLeadAdded}
+        />
       </div>
 
       {/* Mobile Menu */}
-      {mobileMenuOpen && (
-        <>
-          <div
-            className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-          
-          <div className="lg:hidden fixed top-0 left-0 h-full w-64 bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out">
-            <div className="p-4 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Menu</h2>
-                <button
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-            
-            <nav className="p-4 space-y-2">
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  handleClearCacheAndRefresh();
-                }}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 transition-colors w-full text-left"
-              >
-                <RefreshCw size={20} className="text-gray-600" />
-                <span className="text-gray-900 font-medium">Refresh Leads</span>
-              </button>
-              
-              <AddLeadDialog onLeadAdded={handleLeadAdded} />
-              
-              <div className="border-t border-gray-200 pt-4">
-                <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Settings
-                </div>
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-gray-900">Auto Refresh</span>
-                  <input
-                    type="checkbox"
-                    checked={autoRefresh}
-                    onChange={(e) => setAutoRefresh(e.target.checked)}
-                    className="h-4 w-4 text-blue-600 rounded"
-                  />
-                </div>
-                <div className="px-4 py-3">
-                  <label className="text-sm text-gray-700 mb-2 block">Refresh Interval</label>
-                  <select
-                    value={refreshInterval}
-                    onChange={(e) => setRefreshInterval(Number(e.target.value))}
-                    className="w-full text-sm border border-gray-300 rounded-md px-3 py-2"
-                  >
-                    <option value={60}>1 minute</option>
-                    <option value={300}>5 minutes</option>
-                    <option value={600}>10 minutes</option>
-                    <option value={900}>15 minutes</option>
-                  </select>
-                </div>
-              </div>
-            </nav>
-          </div>
-        </>
-      )}
+      <MobileMenu
+        mobileMenuOpen={mobileMenuOpen}
+        setMobileMenuOpen={setMobileMenuOpen}
+        handleClearCacheAndRefresh={handleClearCacheAndRefresh}
+        onLeadAdded={handleLeadAdded}
+        autoRefresh={autoRefresh}
+        setAutoRefresh={setAutoRefresh}
+        refreshInterval={refreshInterval}
+        setRefreshInterval={setRefreshInterval}
+      />
     </div>
   );
 };

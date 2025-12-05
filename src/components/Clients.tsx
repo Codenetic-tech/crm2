@@ -1,62 +1,139 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Users, Mail, Phone, Calendar, Filter, Search, Download, 
-  Plus, MoreVertical, Eye, Edit, Trash2, ChevronDown,
-  Building2, User, MailIcon, PhoneIcon, MessageCircle,
-  Activity, CheckSquare, FileText, ArrowUpRight, ArrowDownRight,
-  IndianRupee, RefreshCw, TrendingUp, Check,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Wifi, WifiOff,
-  BookText,
-  CalendarCheck,
-  Clock
+import {
+  Users, User, PhoneIcon, MessageCircle,
+  Check, Wifi, WifiOff,
+  Clock, ChevronsUpDown, ArrowUpDown, ChevronDown,
+  MoreVertical, RefreshCw, CalendarCheck, PhoneMissed, CheckSquare,
+  Building2, Search, Filter, TrendingUp, BookText
 } from 'lucide-react';
+import {
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Tooltip } from '@radix-ui/react-tooltip';
 
 // Import the actual useAuth hook and fetchLeads function
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchLeads, refreshLeads, type Lead, clearAllCache } from '@/utils/crm';
-import { PathBreadcrumb } from './PathBreadcrumb';
-import { SummaryCard, SummaryCardsGrid } from './SummaryCard';
+import { SummaryCard } from './SummaryCard';
+import { AddLeadDialog } from './AddLeadDialog';
+import CommentModal from '@/components/CRM/CommentModal';
 
-interface SummaryData {
-  totalLeads: number;
-  newLeads: number;
-  contactedLeads: number;
-  followup: number;
-  wonleads?: number;
-  qualifiedLeads: number;
-  totalValue: number;
-  conversionRate: number;
-  firstTradedClients: number;
-}
+// Import shadcn table components
+import {
+  ColumnDef,
+  ColumnFiltersState,
+  SortingState,
+  VisibilityState,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+  FilterFn,
+} from "@tanstack/react-table"
 
-const statusOptions = [
-  //{ value: 'new', label: 'New', color: 'bg-blue-100 text-blue-800' },
-  //{ value: 'Contacted', label: 'Contacted', color: 'bg-purple-100 text-purple-800' },
-  //{ value: 'followup', label: 'Followup', color: 'bg-yellow-100 text-yellow-800' },
-  //{ value: 'qualified', label: 'Qualified', color: 'bg-green-100 text-green-800' },
-  //{ value: 'negotiation', label: 'Negotiation', color: 'bg-orange-100 text-orange-800' },
-  //{ value: 'won', label: 'Won', color: 'bg-emerald-100 text-emerald-800' },
-  //{ value: 'lost', label: 'Lost', color: 'bg-red-100 text-red-800' }
-  //{ value: 'client', label: 'Client', color: 'bg-green-100 text-green-800' },
-];
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
+// Import combobox components
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
+
+// Import Refactored Components
+import {
+  CampaignFilter,
+  SourceFilter,
+  AssignedUserFilter,
+  statusOptions,
+  getStatusColor
+} from './Filters';
+import { DashboardTable } from './DashboardTable';
+import {
+  MobileHeader,
+  MobileSearchBar,
+  MobileFilterPanel,
+  MobileFiltersModal,
+  MobileColumnVisibilityModal,
+  MobileMenu,
+  MobileLeadList,
+  SummaryData
+} from './MobileView';
 
 // Rate limiting constants
 const REFRESH_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes in milliseconds
 
+// Custom filter functions for TanStack Table
+const globalFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string) => {
+  const search = filterValue.toLowerCase();
+  const lead = row.original;
+
+  return (
+    lead.name?.toLowerCase().includes(search) ||
+    lead.company?.toLowerCase().includes(search) ||
+    lead.email?.toLowerCase().includes(search) ||
+    lead.phone?.toLowerCase().includes(search) ||
+    lead.city?.toLowerCase().includes(search) ||
+    lead.source?.toLowerCase().includes(search) ||
+    lead.campaign?.toLowerCase().includes(search) ||
+    lead.status?.toLowerCase().includes(search) ||
+    false
+  );
+};
+
+const statusFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string) => {
+  if (filterValue === 'all' || !filterValue) return true;
+  return row.original.status === filterValue;
+};
+
+const campaignFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string) => {
+  if (!filterValue || filterValue === 'all') return true;
+  const campaign = row.original.campaign || '';
+  return campaign.toLowerCase().includes(filterValue.toLowerCase());
+};
+
+const assignedUserFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string) => {
+  if (!filterValue || filterValue === 'all') return true;
+  const assignData = row.original._assign as string;
+  try {
+    const assignedUsers = JSON.parse(assignData || "[]") as string[];
+    return assignedUsers.some(user =>
+      user.toLowerCase().includes(filterValue.toLowerCase())
+    );
+  } catch {
+    return false;
+  }
+};
+
 const Clients: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth(); // Get actual user from auth context
-  
+  const { user } = useAuth();
+
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('client');
-  const [sortConfig, setSortConfig] = useState<{ key: keyof Lead; direction: 'asc' | 'desc' }>({ 
-    key: 'createdAt', 
-    direction: 'desc' 
-  });
-  
+
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
@@ -69,39 +146,717 @@ const Clients: React.FC = () => {
   const [modifiedRecordsCount, setModifiedRecordsCount] = useState(0);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [isChangingStatus, setIsChangingStatus] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Filter states
+  const [selectedCampaign, setSelectedCampaign] = useState<string>('');
+  const [selectedSource, setSelectedSource] = useState<string>('');
+  const [selectedAssignedUser, setSelectedAssignedUser] = useState<string>('');
 
   // Rate limiting state
   const [lastRefreshTime, setLastRefreshTime] = useState<number | null>(null);
   const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
+  // Mobile specific states
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [mobileColumnVisibilityOpen, setMobileColumnVisibilityOpen] = useState(false);
 
   // Refs
   const lastFetchedData = useRef<Lead[]>([]);
   const autoRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const cooldownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Comment state
+  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
+  const [selectedLeadForComment, setSelectedLeadForComment] = useState<Lead | null>(null);
+  const [newComment, setNewComment] = useState('');
+  const [isPostingComment, setIsPostingComment] = useState(false);
+
+  // TanStack Table state
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'createdAt', desc: true }]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [globalFilter, setGlobalFilter] = useState('');
+
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedVisibility = localStorage.getItem('crm-clients-column-visibility');
+        if (savedVisibility) {
+          return JSON.parse(savedVisibility);
+        }
+      } catch (error) {
+        console.error('Error loading column visibility from localStorage:', error);
+      }
+    }
+    return {
+      other_brokers: false
+    };
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('crm-clients-column-visibility', JSON.stringify(columnVisibility));
+      } catch (error) {
+        console.error('Error saving column visibility to localStorage:', error);
+      }
+    }
+  }, [columnVisibility]);
+
+  const [rowSelection, setRowSelection] = useState({});
+
+
   // Get actual user credentials from auth context
   const employeeId = user?.employeeId || '';
   const email = user?.email || '';
 
-  // Rate limiting functions - FIXED: Use useMemo for canRefresh to ensure proper updates
+  // Helper function to get display name from email
+  const getDisplayName = (email: string) => {
+    if (email === 'all') return 'All Users';
+    const namePart = email.split('@')[0];
+    return namePart.split('.').map(part =>
+      part.charAt(0).toUpperCase() + part.slice(1)
+    ).join(' ');
+  };
+
+  // Comment functions
+  const openCommentModal = (lead: Lead, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedLeadForComment(lead);
+    setNewComment('');
+    setIsCommentModalOpen(true);
+  };
+
+  const postComment = React.useCallback(async () => {
+    if (!selectedLeadForComment || !newComment.trim()) return;
+
+    setIsPostingComment(true);
+    try {
+      const response = await fetch('https://n8n.gopocket.in/webhook/hrms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          source: 'postcomments',
+          employeeId: employeeId,
+          email: email,
+          leadid: selectedLeadForComment.id,
+          content: newComment.trim()
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to post comment: ${response.status}`);
+      }
+
+      setNewComment('');
+      setIsCommentModalOpen(false);
+      handleClearCacheAndRefresh();
+
+    } catch (error: any) {
+      console.error('Error posting comment:', error);
+      setError(`Failed to post comment: ${error.message}`);
+    } finally {
+      setIsPostingComment(false);
+    }
+  }, [selectedLeadForComment, newComment, employeeId, email]);
+
+  const closeCommentModal = () => {
+    setIsCommentModalOpen(false);
+    setSelectedLeadForComment(null);
+    setNewComment('');
+  };
+
+  // Get unique campaigns and assigned users
+  const campaignOptions = useMemo(() => {
+    const campaigns = Array.from(new Set(
+      leads
+        .map(lead => lead.campaign)
+        .filter(Boolean)
+        .sort()
+    )).map(campaign => ({
+      value: campaign,
+      label: campaign
+    }));
+
+    return [{ value: 'all', label: 'All Campaigns' }, ...campaigns];
+  }, [leads]);
+
+  const sourceOptions = useMemo(() => {
+    const source = Array.from(new Set(
+      leads
+        .map(lead => lead.source)
+        .filter(Boolean)
+        .sort()
+    )).map(source => ({
+      value: source,
+      label: source
+    }));
+
+    return [{ value: 'all', label: 'All Source' }, ...source];
+  }, [leads]);
+
+  const assignedUserOptions = useMemo(() => {
+    const users = new Set<string>();
+    leads.forEach(lead => {
+      try {
+        const assignData = JSON.parse(lead._assign || "[]") as string[];
+        assignData.forEach(user => {
+          if (user !== "Administrator") {
+            users.add(user);
+          }
+        });
+      } catch (e) {
+        // ignore parsing errors
+      }
+    });
+
+    const userOptions = Array.from(users).sort().map(user => ({
+      value: user,
+      label: getDisplayName(user)
+    }));
+
+    return [{ value: 'all', label: 'All Users' }, ...userOptions];
+  }, [leads]);
+
+  // Column definitions
+  const columns: ColumnDef<Lead>[] = [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={table.getIsAllPageRowsSelected()}
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          aria-label="Select all"
+          className="hidden lg:flex"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(!!value)}
+          aria-label="Select row"
+          onClick={(e) => e.stopPropagation()}
+          className="hidden lg:flex"
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
+    {
+      accessorKey: "name",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Lead Name
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => {
+        const lead = row.original;
+        return (
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-medium text-sm">
+              {lead.name.split(' ').map(n => n[0]).join('')}
+            </div>
+            <div>
+              <p className="font-medium text-gray-900 text-sm">{lead.name}</p>
+            </div>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: "ucc",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            UCC
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="text-sm text-gray-900 hidden lg:block font-normal">
+          {row.getValue("ucc") || 'N/A'}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "source",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Source
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="text-sm text-gray-900 hidden lg:block font-normal">
+          {row.getValue("source") || 'N/A'}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "campaign",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Campaign
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="text-sm text-gray-900 hidden lg:block font-normal">
+          {row.getValue("campaign") || 'N/A'}
+        </div>
+      ),
+      filterFn: campaignFilterFn,
+    },
+    {
+      accessorKey: "phone",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Contact
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <PhoneIcon size={14} className="text-gray-400" />
+          <span className="text-sm text-gray-900 font-normal">{row.getValue("phone")}</span>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "city",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            City
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <Building2 size={16} className="text-gray-400" />
+          <span className="text-sm text-gray-900 font-normal">{row.getValue("city") || 'N/A'}</span>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "branchCode",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Branch
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="text-sm text-gray-900 hidden lg:block font-normal">
+          {row.original.branchCode || 'N/A'}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "other_brokers",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Other Brokers
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Building2 size={16} className="text-gray-400" />
+            <span className="text-sm text-gray-900 font-normal">{row.getValue("other_brokers") || 'N/A'}</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "status",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Status
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => {
+        const status = row.getValue("status") as Lead['status'];
+        return (
+          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </span>
+        )
+      },
+      filterFn: statusFilterFn,
+    },
+    {
+      accessorKey: "lastActivity",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Last Modified
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="text-sm text-gray-900 font-normal hidden lg:block">
+          {row.getValue("lastActivity")}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "_comments",
+      header: () => (
+        <div className="font-medium text-sm text-gray-900 hidden lg:flex">
+          Comment
+        </div>
+      ),
+      cell: ({ row }) => {
+        const commentsRaw = row.getValue("_comments") as string;
+
+        let latestComment = null;
+        let commentCount = 0;
+
+        try {
+          const commentsArray = JSON.parse(commentsRaw || "[]");
+          if (Array.isArray(commentsArray) && commentsArray.length > 0) {
+            latestComment = commentsArray[commentsArray.length - 1];
+            commentCount = commentsArray.length;
+          }
+        } catch (e) {
+          console.error("Invalid comments JSON", e);
+        }
+
+        return (
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className="truncate max-w-[160px] inline-block cursor-default text-sm text-gray-900 hover:bg-gray-50 px-2 py-1 rounded"
+                >
+                  <div className="flex items-center gap-2">
+                    <MessageCircle size={14} className="text-blue-400" />
+                    <span>
+                      {latestComment ? (
+                        <span className="truncate">{latestComment.comment}</span>
+                      ) : (
+                        'No comments'
+                      )}
+                    </span>
+                    {commentCount > 0 && (
+                      <span className="bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded-full">
+                        {commentCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent
+                side="bottom"
+                align="center"
+                sideOffset={6}
+                className="bg-black text-white px-2 py-1 rounded-md shadow-md text-xs max-w-[200px] break-words"
+              >
+                {latestComment ? (
+                  <>
+                    <div className="font-medium">{latestComment.by}</div>
+                    <div className="text-gray-300 text-xs mt-1">
+                      Commented
+                    </div>
+                    <div className="mt-1">{latestComment.comment}</div>
+                  </>
+                ) : (
+                  'No comments'
+                )}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      },
+    },
+    {
+      accessorKey: "_assign",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Assigned To
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        );
+      },
+      cell: ({ row }) => {
+        const assignData = row.getValue("_assign") as string;
+        const users: string[] = JSON.parse(assignData || "[]");
+
+        const emailRegex =
+          /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
+
+        return (
+          <div className="flex -space-x-2">
+            {users
+              .filter((user) => user && user !== "Administrator")
+              .map((user, index) => {
+                const match = user.match(emailRegex);
+                const email = match ? match[0] : user;
+                const firstLetter =
+                  (user && user.charAt(0).toUpperCase()) || "?";
+
+                return (
+                  <TooltipProvider key={index} delayDuration={100}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded-full bg-blue-500 text-white text-xs font-medium border-2 border-white cursor-pointer"
+                        >
+                          {firstLetter}
+                        </div>
+                      </TooltipTrigger>
+
+                      <TooltipContent
+                        side="right"
+                        align="start"
+                        sideOffset={12}
+                        className="bg-black text-white px-2 py-2 rounded-md shadow-md text-xs"
+                      >
+                        {email}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                );
+              })}
+          </div>
+        );
+      },
+      filterFn: assignedUserFilterFn,
+    },
+    {
+      accessorKey: "createdAt",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Created
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => {
+        const date = new Date(row.getValue("createdAt"));
+        return (
+          <div className="hidden lg:block">
+            <p className="text-sm text-gray-900 font-normal">{date.toLocaleDateString('en-GB')}</p>
+            {row.original.firstRespondedOn && (
+              <p className="text-xs text-gray-500 mt-0.5">
+                First response: {new Date(row.original.firstRespondedOn).toLocaleDateString()}
+              </p>
+            )}
+          </div>
+        )
+      },
+    },
+    {
+      id: "actions",
+      cell: ({ row }) => {
+        const lead = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button
+                className="p-1 sm:p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenDropdown(openDropdown === lead.id ? null : lead.id);
+                }}
+                disabled={isChangingStatus === lead.id}
+              >
+                {isChangingStatus === lead.id ? (
+                  <RefreshCw size={16} className="animate-spin" />
+                ) : (
+                  <MoreVertical size={16} />
+                )}
+              </button>
+
+              {openDropdown === lead.id && (
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1 hidden lg:block">
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-50"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openCommentModal(lead, e);
+                      setOpenDropdown(null);
+                    }}
+                  >
+                    <MessageCircle size={14} className="text-blue-500" />
+                    <span className="font-normal">Add Comment</span>
+                  </button>
+
+                  <div className="px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-100">
+                    Change Status
+                  </div>
+                  {statusOptions.map((status) => (
+                    <button
+                      key={status.value}
+                      className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between hover:bg-gray-50 ${lead.status === status.value ? 'bg-blue-50' : ''
+                        }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        changeLeadStatus(lead.id, status.value, lead.name);
+                        setOpenDropdown(null);
+                      }}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className={`w-2 h-2 rounded-full ${status.color.split(' ')[0]} flex-shrink-0`} />
+                        <span className="font-normal truncate">{status.label}</span>
+                      </div>
+                      {lead.status === status.value && (
+                        <Check size={16} className="text-blue-600 flex-shrink-0 ml-2" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      },
+      enableHiding: false,
+    },
+  ];
+
+  // Filter leads to only include 'won' and 'client' statuses
+  const filteredLeads = useMemo(() => {
+    return leads.filter(lead =>
+      ['won', 'client'].includes(lead.status)
+    );
+  }, [leads]);
+
+  // Initialize TanStack Table
+  const table = useReactTable({
+    data: filteredLeads,
+    columns,
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onGlobalFilterChange: setGlobalFilter,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    onColumnVisibilityChange: setColumnVisibility,
+    onRowSelectionChange: setRowSelection,
+    globalFilterFn: globalFilterFn,
+    state: {
+      sorting,
+      columnFilters,
+      globalFilter,
+      columnVisibility,
+      rowSelection,
+    },
+  });
+
+  // Apply filters
+  useEffect(() => {
+    if (selectedCampaign && selectedCampaign !== 'all') {
+      table.getColumn('campaign')?.setFilterValue(selectedCampaign);
+    } else {
+      table.getColumn('campaign')?.setFilterValue('');
+    }
+  }, [selectedCampaign, table]);
+
+  useEffect(() => {
+    if (selectedSource && selectedSource !== 'all') {
+      table.getColumn('source')?.setFilterValue(selectedSource);
+    } else {
+      table.getColumn('source')?.setFilterValue('');
+    }
+  }, [selectedSource, table]);
+
+  useEffect(() => {
+    if (selectedAssignedUser && selectedAssignedUser !== 'all') {
+      table.getColumn('_assign')?.setFilterValue(selectedAssignedUser);
+    } else {
+      table.getColumn('_assign')?.setFilterValue('');
+    }
+  }, [selectedAssignedUser, table]);
+
+  // Rate limiting functions
   const canRefresh = useMemo(() => {
     if (!lastRefreshTime) return true;
     const timeSinceLastRefresh = Date.now() - lastRefreshTime;
     const canRefreshNow = timeSinceLastRefresh >= REFRESH_COOLDOWN_MS;
-    
-    // If we can refresh now but cooldown timer is still running, clear it
+
     if (canRefreshNow && cooldownIntervalRef.current) {
       clearInterval(cooldownIntervalRef.current);
       cooldownIntervalRef.current = null;
       setCooldownRemaining(0);
     }
-    
+
     return canRefreshNow;
-  }, [lastRefreshTime, cooldownRemaining]); // Added cooldownRemaining as dependency
+  }, [lastRefreshTime, cooldownRemaining]);
 
   const getCooldownRemaining = () => {
     if (!lastRefreshTime) return 0;
@@ -116,25 +871,20 @@ const Clients: React.FC = () => {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  // Update cooldown timer - FIXED: Improved logic to handle expiration
   useEffect(() => {
-    // Clear any existing interval
     if (cooldownIntervalRef.current) {
       clearInterval(cooldownIntervalRef.current);
       cooldownIntervalRef.current = null;
     }
-    
+
     if (lastRefreshTime && !canRefresh) {
-      // Set initial remaining time
       const initialRemaining = getCooldownRemaining();
       setCooldownRemaining(initialRemaining);
-      
-      // Start the countdown interval
+
       cooldownIntervalRef.current = setInterval(() => {
         const remaining = getCooldownRemaining();
         setCooldownRemaining(remaining);
-        
-        // Clear interval when cooldown is complete
+
         if (remaining <= 0) {
           if (cooldownIntervalRef.current) {
             clearInterval(cooldownIntervalRef.current);
@@ -153,15 +903,13 @@ const Clients: React.FC = () => {
         cooldownIntervalRef.current = null;
       }
     };
-  }, [lastRefreshTime, canRefresh]); // Added canRefresh as dependency
+  }, [lastRefreshTime, canRefresh]);
 
-  // Function to change lead status
   const changeLeadStatus = async (leadId: string, newStatus: string, leadName: string) => {
     setIsChangingStatus(leadId);
     setOpenDropdown(null);
-    
+
     try {
-      // Send request to webhook
       const response = await fetch('https://n8n.gopocket.in/webhook/hrms', {
         method: 'POST',
         headers: {
@@ -182,33 +930,23 @@ const Clients: React.FC = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const result = await response.json();
-      console.log('Status change response:', result);
-
-      // Update local state if webhook call was successful
-      setLeads(prevLeads => 
-        prevLeads.map(lead => 
-          lead.id === leadId 
+      setLeads(prevLeads =>
+        prevLeads.map(lead =>
+          lead.id === leadId
             ? { ...lead, status: newStatus as Lead['status'] }
             : lead
         )
       );
 
-      // Show success feedback
-      console.log(`Status changed to ${newStatus} for lead: ${leadName}`);
-      
     } catch (error: any) {
       console.error('Error changing lead status:', error);
       setError(`Failed to change status: ${error.message}`);
-      
-      // Revert the status change in UI if the API call failed
-      // You might want to show a toast notification here instead
     } finally {
       setIsChangingStatus(null);
+      handleClearCacheAndRefresh();
     }
   };
 
-  // Fetch all leads using the actual fetchLeads function
   const fetchAllLeads = async (isAutoRefresh = false, isManualRefresh = false) => {
     try {
       if (isAutoRefresh) {
@@ -220,77 +958,63 @@ const Clients: React.FC = () => {
       } else {
         setIsInitialLoading(true);
       }
-      
+
       setError(null);
-      
-      // Use the actual fetchLeads function that sends employeeId and email to webhook
+
       const apiLeads = await fetchLeads(employeeId, email, user.team);
-      
+
       if (isAutoRefresh && lastFetchedData.current.length > 0) {
-        // Incremental update for auto-refresh
         const currentDataMap = new Map(lastFetchedData.current.map(lead => [lead.id, getLeadContentHash(lead)]));
         const newDataMap = new Map(apiLeads.map(lead => [lead.id, getLeadContentHash(lead)]));
-        
+
         let newCount = 0;
         let modifiedCount = 0;
-        
-        // Start with clean data (no flags)
+
         const cleanCurrentData = lastFetchedData.current.map(lead => ({
           ...lead,
           _isNew: false,
           _isModified: false
         }));
-        
-        // Create a map of current data by ID
+
         const currentDataById = new Map(cleanCurrentData.map(lead => [lead.id, lead]));
-        
-        // Process new data
+
         const updatedLeads: Lead[] = [];
-        
+
         apiLeads.forEach(newLead => {
           const leadId = newLead.id;
           const newContentHash = newDataMap.get(leadId);
           const oldContentHash = currentDataMap.get(leadId);
           const existingLead = currentDataById.get(leadId);
-          
+
           if (!existingLead) {
-            // New lead
             newLead._isNew = true;
             updatedLeads.push(newLead);
             newCount++;
-            console.log('New lead detected:', newLead);
           } else if (oldContentHash !== newContentHash) {
-            // Modified lead
             newLead._isModified = true;
             updatedLeads.push(newLead);
             modifiedCount++;
-            console.log('Modified lead detected:', { old: existingLead, new: newLead });
           } else {
-            // Unchanged lead
             updatedLeads.push(existingLead);
           }
         });
-        
-        // Sort by creation date (newest first)
+
         updatedLeads.sort((a, b) => {
           const timeA = new Date(a.createdAt).getTime();
           const timeB = new Date(b.createdAt).getTime();
           return timeB - timeA;
         });
-        
+
         setLeads(updatedLeads);
         lastFetchedData.current = updatedLeads.map(lead => ({
           ...lead,
           _isNew: false,
           _isModified: false
         }));
-        
+
         setNewRecordsCount(newCount);
         setModifiedRecordsCount(modifiedCount);
-        
-        console.log(`Auto-refresh completed: ${newCount} new, ${modifiedCount} modified, ${updatedLeads.length} total`);
-        
-        // Clear new/modified flags after 5 seconds
+
         setTimeout(() => {
           setLeads(prev => prev.map(lead => ({
             ...lead,
@@ -298,28 +1022,30 @@ const Clients: React.FC = () => {
             _isModified: false
           })));
         }, 5000);
-        
+
         setConnectionStatus('connected');
       } else {
-        // Full refresh for initial load
         const sortedLeads = apiLeads.sort((a, b) => {
           const timeA = new Date(a.createdAt).getTime();
           const timeB = new Date(b.createdAt).getTime();
           return timeB - timeA;
         });
-        
+
         setLeads(sortedLeads);
         lastFetchedData.current = sortedLeads;
         setNewRecordsCount(0);
         setModifiedRecordsCount(0);
         setConnectionStatus('connected');
-        console.log('Full refresh completed:', sortedLeads.length, 'leads');
       }
-      
+
       setLastUpdated(new Date());
     } catch (error: any) {
       console.error('Error fetching leads:', error);
-      setError(`Failed to fetch leads: ${error.message}`);
+      if (error.message.includes('Failed to fetch') || error.message.includes('JSON')) {
+        setError('Unable to load leads. Please check your connection and try again.');
+      } else {
+        setError(`Failed to fetch leads: ${error.message}`);
+      }
       setConnectionStatus('disconnected');
     } finally {
       setIsInitialLoading(false);
@@ -328,13 +1054,11 @@ const Clients: React.FC = () => {
     }
   };
 
-  // Helper function to get lead content hash for comparison
   const getLeadContentHash = (lead: Lead): string => {
     const keys: (keyof Lead)[] = ['name', 'email', 'phone', 'company', 'status', 'value', 'assignedTo', 'lastActivity'];
     return keys.map(key => String(lead[key] || '')).join('|');
   };
 
-  // Rate-limited refresh function
   const handleRateLimitedRefresh = async () => {
     if (!canRefresh) {
       setError(`Please wait ${formatCooldownTime(cooldownRemaining)} before refreshing again`);
@@ -345,50 +1069,46 @@ const Clients: React.FC = () => {
     await handleClearCacheAndRefresh();
   };
 
-  // Modified clear cache and refresh function
   const handleClearCacheAndRefresh = async () => {
     if (!employeeId || !email) return;
-    
-    // Clear cache and force refresh from API
+
     clearAllCache();
     await refreshLeads(employeeId, email, user.team);
-    await fetchAllLeads(false, true); // Pass true to indicate manual refresh
+    await fetchAllLeads(false, true);
   };
 
-  // Load data on mount
   useEffect(() => {
     if (employeeId && email) {
       fetchAllLeads(false);
     }
   }, [employeeId, email]);
 
-// Auto-refresh effect
-useEffect(() => {
-  if (autoRefreshTimeoutRef.current) {
-    clearTimeout(autoRefreshTimeoutRef.current);
-  }
-  
-  if (autoRefresh && !isInitialLoading && employeeId && email) {
-    const scheduleNextRefresh = () => {
-      autoRefreshTimeoutRef.current = setTimeout(() => {
-        handleClearCacheAndRefresh().finally(() => {
-          scheduleNextRefresh();
-        });
-      }, refreshInterval * 1000);
-    };
-    
-    scheduleNextRefresh();
-  }
-  
-  return () => {
+  useEffect(() => {
     if (autoRefreshTimeoutRef.current) {
       clearTimeout(autoRefreshTimeoutRef.current);
     }
-  };
-}, [autoRefresh, refreshInterval, isInitialLoading, employeeId, email]);
 
-  // Calculate summary data - start with 0 for initial state
-  const summaryData: SummaryData = useMemo(() => {
+    if (autoRefresh && !isInitialLoading && employeeId && email) {
+      const scheduleNextRefresh = () => {
+        autoRefreshTimeoutRef.current = setTimeout(() => {
+          handleClearCacheAndRefresh().finally(() => {
+            scheduleNextRefresh();
+          });
+        }, refreshInterval * 1000);
+      };
+
+      scheduleNextRefresh();
+    }
+
+    return () => {
+      if (autoRefreshTimeoutRef.current) {
+        clearTimeout(autoRefreshTimeoutRef.current);
+      }
+    };
+  }, [autoRefresh, refreshInterval, isInitialLoading, employeeId, email]);
+
+  // Calculate summary data for Clients view
+  const summaryData = useMemo(() => {
     if (isInitialLoading && leads.length === 0) {
       return {
         totalLeads: 0,
@@ -399,7 +1119,14 @@ useEffect(() => {
         wonleads: 0,
         totalValue: 0,
         conversionRate: 0,
-        firstTradedClients: 0
+        firstTradedClients: 0,
+        // Add missing fields for MobileHeader compatibility
+        notinterested: 0,
+        existingclient: 0,
+        rnr: 0,
+        switchoff: 0,
+        callback: 0,
+        won: 0,
       };
     }
 
@@ -412,97 +1139,25 @@ useEffect(() => {
       qualifiedLeads: leads.filter(lead => lead.status === 'qualified').length,
       totalValue: leads.reduce((sum, lead) => sum + lead.value, 0),
       firstTradedClients: leads.filter(lead => lead.tradeDone === "TRUE").length,
-      conversionRate: Math.round((leads.filter(lead => ['qualified', 'negotiation', 'won'].includes(lead.status)).length / Math.max(leads.length, 1)) * 100)
+      conversionRate: Math.round((leads.filter(lead => ['qualified', 'negotiation', 'won'].includes(lead.status)).length / Math.max(leads.length, 1)) * 100),
+      // Add missing fields for MobileHeader compatibility
+      notinterested: leads.filter(lead => lead.status === 'Not Interested').length,
+      existingclient: leads.filter(lead => lead.status === 'won').length, // Assuming won is existing client
+      rnr: leads.filter(lead => lead.status === 'RNR').length,
+      switchoff: leads.filter(lead => lead.status === 'Switch off').length,
+      callback: leads.filter(lead => lead.status === 'Call Back').length,
+      won: leads.filter(lead => lead.status === 'won').length,
     };
   }, [leads, isInitialLoading]);
 
-  // Filter and sort leads
-  useEffect(() => {
-    let result = leads;
-
-    if (searchTerm) {
-      result = result.filter(lead =>
-        lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (lead.city && lead.city.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (lead.source && lead.source.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    }
-
-    if (statusFilter !== 'all') {
-      result = result.filter(lead => lead.status === statusFilter);
-    }
-
-    if (sortConfig) {
-      result = [...result].sort((a, b) => {
-        const aValue = a[sortConfig.key];
-        const bValue = b[sortConfig.key];
-
-        if (sortConfig.key === 'createdAt') {
-          const aDate = new Date(aValue as string).getTime();
-          const bDate = new Date(bValue as string).getTime();
-          
-          if (aDate < bDate) {
-            return sortConfig.direction === 'asc' ? -1 : 1;
-          }
-          if (aDate > bDate) {
-            return sortConfig.direction === 'asc' ? 1 : -1;
-          }
-          return 0;
-        }
-
-        if (aValue < bValue) {
-          return sortConfig.direction === 'asc' ? -1 : 1;
-        }
-        if (aValue > bValue) {
-          return sortConfig.direction === 'asc' ? 1 : -1;
-        }
-        return 0;
-      });
-    }
-
-    setFilteredLeads(result);
-    setCurrentPage(1);
-  }, [leads, searchTerm, statusFilter, sortConfig]);
-
-  // Pagination
-  const totalPages = Math.ceil(filteredLeads.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentLeads = filteredLeads.slice(startIndex, endIndex);
-
-  const handleSort = (key: keyof Lead) => {
-    let direction: 'asc' | 'desc' = 'asc';
-    
-    if (sortConfig && sortConfig.key === key) {
-      direction = sortConfig.direction === 'asc' ? 'desc' : 'asc';
-    }
-    
-    if (key === 'createdAt' && !sortConfig) {
-      direction = 'desc';
-    }
-    
-    setSortConfig({ key, direction });
-  };
-
-  const getStatusColor = (status: Lead['status']) => {
-    const colors = {
-      new: 'bg-blue-100 text-blue-800',
-      Contacted: 'bg-purple-100 text-purple-800',
-      qualified: 'bg-green-100 text-green-800',
-      followup: 'bg-yellow-100 text-yellow-800',
-      negotiation: 'bg-orange-100 text-orange-800',
-      won: 'bg-green-100 text-green-800',
-      lost: 'bg-red-100 text-red-800',
-      client: 'bg-green-100 text-green-800',
-    };
-    return colors[status];
-  };
-
   const handleLeadClick = (leadId: string) => {
-    navigate(`/crm/leads/${leadId}`);
+    if (table.getFilteredSelectedRowModel().rows.length === 0) {
+      navigate(`/crm/leads/${leadId}`);
+    }
+  };
+
+  const handleLeadAdded = () => {
+    handleClearCacheAndRefresh();
   };
 
   const toggleDropdown = (leadId: string, e: React.MouseEvent) => {
@@ -510,63 +1165,43 @@ useEffect(() => {
     setOpenDropdown(openDropdown === leadId ? null : leadId);
   };
 
-  const goToPage = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-  };
-
-  const getConnectionStatusIcon = () => {
-    switch (connectionStatus) {
-      case 'connected':
-        return <Wifi className="h-4 w-4 text-green-500" />;
-      case 'syncing':
-        return <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />;
-      case 'disconnected':
-        return <WifiOff className="h-4 w-4 text-red-500" />;
-      default:
-        return <Wifi className="h-4 w-4 text-gray-500" />;
-    }
-  };
-
-  // Refresh button component with rate limiting - FIXED: Improved logic
   const RefreshButton = () => {
     const isRefreshing = isManualRefreshing || isAutoRefreshing;
     const isDisabled = !canRefresh || isRefreshing || isInitialLoading;
 
-    // Determine button content
     let buttonContent;
     if (isRefreshing) {
       buttonContent = (
         <>
-          <RefreshCw size={18} className="animate-spin" />
+          <RefreshCw size={16} className="animate-spin" />
           Refreshing...
         </>
       );
     } else if (!canRefresh && cooldownRemaining > 0) {
       buttonContent = (
         <>
-          <Clock size={18} />
+          <Clock size={16} />
           {formatCooldownTime(cooldownRemaining)}
         </>
       );
     } else {
       buttonContent = (
         <>
-          <RefreshCw size={18} />
+          <RefreshCw size={16} />
           Refresh
         </>
       );
     }
 
     return (
-      <button 
+      <button
         onClick={handleRateLimitedRefresh}
         disabled={isDisabled}
-        className="px-4 py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed relative group"
+        className="px-4 py-2 text-gray-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-all flex items-center gap-2 justify-center text-sm disabled:opacity-50 disabled:cursor-not-allowed relative group shadow-sm hover:shadow-md"
         title={!canRefresh ? `Available in ${formatCooldownTime(cooldownRemaining)}` : 'Refresh leads'}
       >
         {buttonContent}
-        
-        {/* Tooltip for cooldown */}
+
         {!canRefresh && cooldownRemaining > 0 && (
           <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap shadow-lg z-10">
             Available in {formatCooldownTime(cooldownRemaining)}
@@ -587,430 +1222,280 @@ useEffect(() => {
     };
   }, []);
 
-  const Pagination = () => (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-gray-200 bg-gray-50">
-      <div className="flex items-center gap-4 text-sm text-gray-600">
-        <span>Showing {startIndex + 1}-{Math.min(endIndex, filteredLeads.length)} of {filteredLeads.length} leads</span>
-      </div>
-      
-      <div className="flex items-center gap-2">
-        <select
-          value={itemsPerPage}
-          onChange={(e) => {
-            setItemsPerPage(Number(e.target.value));
-            setCurrentPage(1);
-          }}
-          className="text-sm border border-gray-300 rounded-md px-3 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        >
-          <option value={5}>5 per page</option>
-          <option value={10}>10 per page</option>
-          <option value={25}>25 per page</option>
-          <option value={50}>50 per page</option>
-        </select>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => goToPage(1)}
-            disabled={currentPage === 1}
-            className="p-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronsLeft size={16} />
-          </button>
-          
-          <button
-            onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage === 1}
-            className="p-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronLeft size={16} />
-          </button>
-
-          <div className="flex items-center gap-1 mx-2">
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              let pageNum;
-              if (totalPages <= 5) {
-                pageNum = i + 1;
-              } else if (currentPage <= 3) {
-                pageNum = i + 1;
-              } else if (currentPage >= totalPages - 2) {
-                pageNum = totalPages - 4 + i;
-              } else {
-                pageNum = currentPage - 2 + i;
-              }
-
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => goToPage(pageNum)}
-                  className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
-                    currentPage === pageNum
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'border border-gray-300 text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  {pageNum}
-                </button>
-              );
-            })}
-          </div>
-
-          <button
-            onClick={() => goToPage(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className="p-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronRight size={16} />
-          </button>
-          
-          <button
-            onClick={() => goToPage(totalPages)}
-            disabled={currentPage === totalPages}
-            className="p-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronsRight size={16} />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
   return (
-    <div className="min-h-screen ml-[30px]">
-  
-        {/* Header */}
-    {/* Desktop Header - Hidden on mobile */}
-    <div className="hidden lg:flex flex-row items-center justify-between gap-4 mb-8">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-3 mb-2">
-          <h1 className="text-lg sm:text-2xl font-bold text-foreground">
-            Client Stage
-          </h1>
-        </div>
+    <div className="lg:pl-6">
+      {/* Comment Modal */}
+      <CommentModal
+        isOpen={isCommentModalOpen}
+        onClose={closeCommentModal}
+        lead={selectedLeadForComment}
+        comment={newComment}
+        onCommentChange={setNewComment}
+        onPostComment={postComment}
+        isPosting={isPostingComment}
+      />
 
-        {lastUpdated && (
-          <div className="flex items-center gap-4 text-xs sm:text-sm">
-            {(newRecordsCount > 0 || modifiedRecordsCount > 0) && (
-              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
-                {newRecordsCount > 0 && `${newRecordsCount} new`}
-                {newRecordsCount > 0 && modifiedRecordsCount > 0 && ', '}
-                {modifiedRecordsCount > 0 && `${modifiedRecordsCount} updated`}
-              </span>
-            )}
+      {/* Mobile Header */}
+      <MobileHeader setMobileMenuOpen={setMobileMenuOpen} summaryData={summaryData} />
+
+      {/* Desktop Header - Hidden on mobile */}
+      <div className="hidden lg:flex flex-row items-center justify-between gap-4 mb-8">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-lg sm:text-2xl font-bold text-foreground">
+              Client Stage
+            </h1>
           </div>
-        )}
+
+          {lastUpdated && (
+            <div className="flex items-center gap-4 text-xs sm:text-sm">
+              {(newRecordsCount > 0 || modifiedRecordsCount > 0) && (
+                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
+                  {newRecordsCount > 0 && `${newRecordsCount} new`}
+                  {newRecordsCount > 0 && modifiedRecordsCount > 0 && ', '}
+                  {modifiedRecordsCount > 0 && `${modifiedRecordsCount} updated`}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+          {/* Auto Refresh Toggle */}
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="autoRefresh"
+              checked={autoRefresh}
+              onChange={(e) => setAutoRefresh(e.target.checked)}
+              className="h-4 w-4 text-blue-600 rounded"
+            />
+            <label htmlFor="autoRefresh" className="text-sm text-gray-700">Auto Refresh</label>
+          </div>
+          {/* Refresh Interval Select */}
+          <select
+            value={refreshInterval}
+            onChange={(e) => setRefreshInterval(Number(e.target.value))}
+            className="text-sm border border-gray-300 rounded-md px-3 py-2"
+          >
+            <option value={60}>1 min</option>
+            <option value={300}>5 min</option>
+            <option value={600}>10 min</option>
+            <option value={900}>15 min</option>
+          </select>
+
+          <RefreshButton />
+        </div>
       </div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-            {/* Auto Refresh Toggle */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="autoRefresh"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-                className="h-4 w-4 text-blue-600 rounded"
+
+      {/* Error Alert */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* Summary Cards - Responsive Grid - Hidden on mobile */}
+      <div className="hidden lg:grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+        <SummaryCard
+          title="Total Leads" value={summaryData.totalLeads} icon={Users} color="blue" shadowColor="blue" trend={{ value: 12.5, isPositive: true }} showTrend={true} className="h-full" />
+
+        <SummaryCard
+          title="Total Converted Leads" value={summaryData.wonleads} icon={User} color="green" shadowColor="green" trend={{ value: 8.2, isPositive: true }} showTrend={true} className="h-full" />
+
+        <SummaryCard
+          title="First Traded Clients" value={summaryData.firstTradedClients} icon={BookText} color="orange" shadowColor="orange" trend={{ value: 22.1, isPositive: true }}
+          showTrend={true} className="h-full" />
+
+        <SummaryCard
+          title="Payin Done Clients" value={summaryData.followup} icon={CalendarCheck} color="yellow" shadowColor="yellow" trend={{ value: 22.1, isPositive: true }}
+          showTrend={true} className="h-full" />
+
+        <SummaryCard
+          title="Qualified Leads" value={summaryData.qualifiedLeads} icon={CheckSquare} color="purple" shadowColor="purple" trend={{ value: 15.3, isPositive: true }} showTrend={true} className="h-full" />
+
+        <SummaryCard
+          title="Conversion Rate" value={summaryData.conversionRate} icon={TrendingUp} color="red" shadowColor="red" trend={{ value: 5.7, isPositive: true }}
+          showTrend={true} suffix="%" className="h-full" />
+      </div>
+
+      {/* Mobile Search */}
+      <MobileSearchBar globalFilter={globalFilter} setGlobalFilter={setGlobalFilter} />
+
+      {/* Mobile Filter Panel */}
+      <MobileFilterPanel
+        setMobileFilterOpen={setMobileFilterOpen}
+        setMobileColumnVisibilityOpen={setMobileColumnVisibilityOpen}
+        selectedCampaign={selectedCampaign}
+        setSelectedCampaign={setSelectedCampaign}
+        selectedSource={selectedSource}
+        setSelectedSource={setSelectedSource}
+        selectedAssignedUser={selectedAssignedUser}
+        setSelectedAssignedUser={setSelectedAssignedUser}
+        table={table}
+        campaignOptions={campaignOptions}
+        sourceOptions={sourceOptions}
+        assignedUserOptions={assignedUserOptions}
+      />
+
+      {/* Mobile Modals */}
+      <MobileFiltersModal
+        mobileFilterOpen={mobileFilterOpen}
+        setMobileFilterOpen={setMobileFilterOpen}
+        selectedCampaign={selectedCampaign}
+        setSelectedCampaign={setSelectedCampaign}
+        selectedAssignedUser={selectedAssignedUser}
+        setSelectedAssignedUser={setSelectedAssignedUser}
+        table={table}
+        campaignOptions={campaignOptions}
+        assignedUserOptions={assignedUserOptions}
+      />
+      <MobileColumnVisibilityModal
+        mobileColumnVisibilityOpen={mobileColumnVisibilityOpen}
+        setMobileColumnVisibilityOpen={setMobileColumnVisibilityOpen}
+        table={table}
+      />
+
+      {/* Desktop Filters */}
+      <div className="hidden lg:block bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-100">
+        <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
+          <div className="flex flex-col sm:flex-row gap-4 flex-1 w-full">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <Input
+                type="text"
+                placeholder="Search all leads..."
+                value={globalFilter ?? ''}
+                onChange={(e) => setGlobalFilter(e.target.value)}
+                className="w-full pl-10 pr-4 py-3"
               />
-              <label htmlFor="autoRefresh" className="text-sm text-gray-700">Auto Refresh</label>
-            </div>
-            {/* Refresh Interval Select */}
-            <select
-              value={refreshInterval}
-              onChange={(e) => setRefreshInterval(Number(e.target.value))}
-              className="text-sm border border-gray-300 rounded-md px-3 py-2"
-            >
-              <option value={60}>1 min</option>
-              <option value={300}>5 min</option>
-              <option value={600}>10 min</option>
-              <option value={900}>15 min</option>
-            </select>
-            
-            {/* Use the new RefreshButton component */}
-            <RefreshButton />
-          </div>
-        </div>
-
-        {/* Error Alert */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
-            {error}
-          </div>
-        )}
-
-        {/* Summary Cards */}
-        <SummaryCardsGrid columns={6} className="mb-6">
-          <SummaryCard
-            title="Total Leads" value={summaryData.totalLeads} icon={Users} color="blue" shadowColor="blue" trend={{ value: 12.5, isPositive: true }} showTrend={true} />
-          
-          <SummaryCard
-            title="Total Converted Leads" value={summaryData.wonleads} icon={User} color="green" shadowColor="green" trend={{ value: 8.2, isPositive: true }} showTrend={true} />
-          
-          <SummaryCard
-            title="First Traded Clients" value={summaryData.firstTradedClients} icon={BookText} color="orange" shadowColor="orange" trend={{ value: 22.1, isPositive: true }} 
-            showTrend={true}/>
-
-          <SummaryCard
-            title="Payin Done Clients" value={summaryData.followup} icon={CalendarCheck} color="yellow" shadowColor="yellow" trend={{ value: 22.1, isPositive: true }} 
-            showTrend={true}/>
-          
-          <SummaryCard
-            title="Qualified Leads" value={summaryData.qualifiedLeads} icon={CheckSquare} color="purple" shadowColor="purple" trend={{ value: 15.3, isPositive: true }} showTrend={true} />
-          
-          <SummaryCard
-            title="Conversion Rate" value={summaryData.conversionRate} icon={TrendingUp} color="red" shadowColor="red" trend={{ value: 5.7, isPositive: true }}
-            showTrend={true} suffix="%" />
-        </SummaryCardsGrid>
-        
-        {/* Filters and Search */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border border-gray-100">
-          <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
-            <div className="flex flex-col sm:flex-row gap-4 flex-1 w-full">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  type="text"
-                  placeholder="Search leads by name, company, email, phone, city, or source..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
             </div>
 
-            <div className="flex gap-2">
-              <button className="px-4 py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2">
-                <Filter size={18} />
-                More Filters
-              </button>
-              <button className="px-4 py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2">
-                <Download size={18} />
-                Export
-              </button>
-            </div>
-          </div>
-        </div>
+            {/* Campaign Filter */}
+            <CampaignFilter
+              value={selectedCampaign}
+              onChange={setSelectedCampaign}
+              options={campaignOptions}
+            />
 
-        {/* Leads Table */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th 
-                    className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('name')}
+            {/* Source Filter */}
+            <SourceFilter
+              value={selectedSource}
+              onChange={setSelectedSource}
+              options={sourceOptions}
+            />
+
+            {/* Assigned User Filter */}
+            <AssignedUserFilter
+              value={selectedAssignedUser}
+              onChange={setSelectedAssignedUser}
+              options={assignedUserOptions}
+            />
+
+            {/* Status Filter using TanStack Table */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="px-4 py-3">
+                  <Filter className="mr-2 h-4 w-4" />
+                  Status: {table.getColumn('status')?.getFilterValue() ?
+                    statusOptions.find(s => s.value === table.getColumn('status')?.getFilterValue())?.label :
+                    'All'}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem
+                  checked={!table.getColumn('status')?.getFilterValue()}
+                  onCheckedChange={() => table.getColumn('status')?.setFilterValue('')}
+                >
+                  All Status
+                </DropdownMenuCheckboxItem>
+                {statusOptions.filter(s => ['won', 'client'].includes(s.value)).map((status) => (
+                  <DropdownMenuCheckboxItem
+                    key={status.value}
+                    checked={table.getColumn('status')?.getFilterValue() === status.value}
+                    onCheckedChange={() => {
+                      table.getColumn('status')?.setFilterValue(
+                        table.getColumn('status')?.getFilterValue() === status.value ? '' : status.value
+                      );
+                    }}
                   >
-                    <div className="flex items-center gap-2">
-                      Lead Name
-                      <ChevronDown 
-                        size={16} 
-                        className={`text-gray-400 transition-transform ${
-                          sortConfig?.key === 'name' && sortConfig.direction === 'desc' ? 'rotate-180' : ''
-                        }`} 
-                      />
-                    </div>
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Trade Done</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">UCC</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Contact</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Branch</th>
-                  <th 
-                    className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('status')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Status
-                      <ChevronDown 
-                        size={16} 
-                        className={`text-gray-400 transition-transform ${
-                          sortConfig?.key === 'status' && sortConfig.direction === 'desc' ? 'rotate-180' : ''
-                        }`} 
-                      />
-                    </div>
-                  </th>
-                  <th 
-                    className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('value')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Last Modified
-                      <ChevronDown 
-                        size={16} 
-                        className={`text-gray-400 transition-transform ${
-                          sortConfig?.key === 'value' && sortConfig.direction === 'desc' ? 'rotate-180' : ''
-                        }`} 
-                      />
-                    </div>
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Referred by</th>
-                  <th 
-                    className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleSort('createdAt')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Created
-                      <ChevronDown 
-                        size={16} 
-                        className={`text-gray-400 transition-transform ${
-                          sortConfig?.key === 'createdAt' && sortConfig.direction === 'desc' ? 'rotate-180' : ''
-                        }`} 
-                      />
-                    </div>
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {isInitialLoading ? (
-                  <tr>
-                    <td colSpan={9} className="text-center py-12">
-                      <RefreshCw className="mx-auto h-8 w-8 animate-spin text-blue-500 mb-4" />
-                      <p className="text-gray-600">Loading leads from API...</p>
-                    </td>
-                  </tr>
-                ) : leads.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="text-center py-12">
-                      <div className="text-gray-400 mb-2">No leads available</div>
-                      <p className="text-gray-600">Start by adding your first lead</p>
-                    </td>
-                  </tr>
-                ) : filteredLeads.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="text-center py-12">
-                      <div className="text-gray-400 mb-2">No matching records found</div>
-                      <p className="text-gray-600">Try adjusting your search or filters</p>
-                    </td>
-                  </tr>
-                ) : (
-                  currentLeads.map((lead) => (
-                    <tr 
-                      key={lead.id} 
-                      className={`hover:bg-gray-50 transition-colors cursor-pointer ${
-                        lead._isNew ? 'bg-green-50 border-l-4 border-green-400' : 
-                        lead._isModified ? 'bg-blue-50 border-l-4 border-blue-400' : ''
-                      }`}
-                      onClick={() => handleLeadClick(lead.id)}
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
-                            {lead.name.split(' ').map(n => n[0]).join('')}
-                          </div>
-                          <div>
-                            <p className="font-medium text-gray-900">{lead.name}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-900">{lead.tradeDone}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-900">{lead.ucc}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <PhoneIcon size={14} className="text-gray-400" />
-                            <span className="text-gray-900">{lead.phone}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <Building2 size={16} className="text-gray-400" />
-                            <span className="text-gray-900">{lead.branchCode}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(lead.status)}`}>
-                            {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="space-y-1">
-                          <span className="font-semibold text-gray-900">{lead.lastActivity}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-gray-700">{lead.referredBy}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div>
-                          <p className="text-sm text-gray-900">{new Date(lead.createdAt).toLocaleDateString('en-GB')}</p>
-                          {lead.firstRespondedOn && (
-                            <p className="text-xs text-gray-400">
-                              First response: {new Date(lead.firstRespondedOn).toLocaleDateString()}
-                            </p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="relative">
-                            <button 
-                              className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                              onClick={(e) => toggleDropdown(lead.id, e)}
-                              disabled={isChangingStatus === lead.id}
-                            >
-                              {isChangingStatus === lead.id ? (
-                                <RefreshCw size={18} className="animate-spin" />
-                              ) : (
-                                <MoreVertical size={18} />
-                              )}
-                            </button>
-                            
-                            {openDropdown === lead.id && (
-                              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10 py-1">
-                                <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">
-                                  Change Status
-                                </div>
-                                {statusOptions.map((status) => (
-                                  <button
-                                    key={status.value}
-                                    className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between hover:bg-gray-50 ${
-                                      lead.status === status.value ? 'bg-blue-50' : ''
-                                    }`}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      changeLeadStatus(lead.id, status.value, lead.name);
-                                    }}
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <div className={`w-2 h-2 rounded-full ${status.color.split(' ')[0]}`} />
-                                      <span>{status.label}</span>
-                                    </div>
-                                    {lead.status === status.value && (
-                                      <Check size={16} className="text-blue-600" />
-                                    )}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                    {status.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
-          {/* Pagination */}
-          {!isInitialLoading && leads.length > 0 && <Pagination />}
+          <div className="flex gap-2">
+            {/* Column Visibility */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="ml-auto">
+                  Columns <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {table
+                  .getAllColumns()
+                  .filter((column) => column.getCanHide())
+                  .map((column) => {
+                    return (
+                      <DropdownMenuCheckboxItem
+                        key={column.id}
+                        className="capitalize"
+                        checked={column.getIsVisible()}
+                        onCheckedChange={(value) =>
+                          column.toggleVisibility(!!value)
+                        }
+                      >
+                        {column.id}
+                      </DropdownMenuCheckboxItem>
+                    )
+                  })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
+      </div>
 
+      {/* Leads Table/List */}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        {/* Mobile View with TanStack Table */}
+        <MobileLeadList
+          isInitialLoading={isInitialLoading}
+          leads={leads}
+          table={table}
+          handleLeadClick={handleLeadClick}
+          toggleDropdown={toggleDropdown}
+          isChangingStatus={isChangingStatus}
+          openDropdown={openDropdown}
+          setOpenDropdown={setOpenDropdown}
+          changeLeadStatus={changeLeadStatus}
+          onLeadAdded={handleLeadAdded}
+        />
+
+        {/* Desktop View with TanStack Table */}
+        <DashboardTable
+          table={table}
+          leads={leads}
+          isInitialLoading={isInitialLoading}
+          handleLeadClick={handleLeadClick}
+          onLeadAdded={handleLeadAdded}
+        />
+      </div>
+
+      {/* Mobile Menu */}
+      <MobileMenu
+        mobileMenuOpen={mobileMenuOpen}
+        setMobileMenuOpen={setMobileMenuOpen}
+        handleClearCacheAndRefresh={handleClearCacheAndRefresh}
+        onLeadAdded={handleLeadAdded}
+        autoRefresh={autoRefresh}
+        setAutoRefresh={setAutoRefresh}
+        refreshInterval={refreshInterval}
+        setRefreshInterval={setRefreshInterval}
+      />
     </div>
   );
 };

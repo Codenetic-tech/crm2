@@ -40,7 +40,7 @@ import { toast } from '@/hooks/use-toast';
 
 // Define all possible menu items - removed subitems
 const allMenuItems = [
-    {
+  {
     title: 'Dashboard',
     url: '/dashboard',
     icon: LayoutDashboard,
@@ -148,7 +148,7 @@ export function AppSidebar() {
   // Filter menu items based on user role
   const menuItems = useMemo(() => {
     if (!user) return [];
-    
+
     return allMenuItems.filter(item => {
       return item.roles.includes(user.role);
     });
@@ -164,30 +164,28 @@ export function AppSidebar() {
 
   return (
     <div className="relative">
-      <Sidebar 
-        className={`transition-all duration-300 ease-in-out border-r border-slate-200/60 bg-gradient-to-b from-white to-slate-50/80 shadow-xl backdrop-blur-sm`} 
+      <Sidebar
+        className={`transition-all duration-300 ease-in-out border-r border-slate-200/60 bg-gradient-to-b from-white to-slate-50/80 shadow-xl backdrop-blur-sm`}
         collapsible="icon"
         style={{ width: isCollapsed ? '80px' : '256px' }}
       >
         <SidebarContent className="bg-transparent">
           {/* Enhanced Logo Section */}
-          <div className={`transition-all duration-300 ${
-            isCollapsed ? 'p-3' : 'p-5'
-          } border-b border-slate-200/60 bg-gradient-to-r from-blue-600/5 to-indigo-600/5`}>
-            <div className={`flex items-center ${
-              isCollapsed ? 'justify-center' : 'space-x-3'
-            }`}>
+          <div className={`transition-all duration-300 ${isCollapsed ? 'p-3' : 'p-5'
+            } border-b border-slate-200/60 bg-gradient-to-r from-blue-600/5 to-indigo-600/5`}>
+            <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'
+              }`}>
               {isCollapsed ? (
-                <img 
-                  src="/go.png" 
-                  alt="GoPocket Logo" 
+                <img
+                  src="/go.png"
+                  alt="GoPocket Logo"
                   className="w-10 h-10 object-contain"
                 />
               ) : (
                 <div className="flex items-center space-x-3">
-                  <img 
-                    src="/go.png" 
-                    alt="GoPocket Logo" 
+                  <img
+                    src="/go.png"
+                    alt="GoPocket Logo"
                     className="w-10 h-10 object-contain"
                   />
                   <div className="transition-all duration-300">
@@ -213,7 +211,7 @@ export function AppSidebar() {
                   </div>
                   {user && (
                     <p className="text-xs text-slate-500 mt-1 font-medium">
-                     <span className="text-slate-700">{user.email.split('@')[0]}</span>
+                      <span className="text-slate-700">{user.email.split('@')[0]}</span>
                     </p>
                   )}
                 </div>
@@ -222,48 +220,41 @@ export function AppSidebar() {
           </div>
 
           {/* Enhanced Navigation Menu - Centered icons in collapsed view */}
-          <SidebarGroup className={`transition-all duration-300 ${
-            isCollapsed ? 'px-0 py-4 mt-4' : 'px-3 py-5 mt-6'
-          }`}>
+          <SidebarGroup className={`transition-all duration-300 ${isCollapsed ? 'px-0 py-4 mt-4' : 'px-3 py-5 mt-6'
+            }`}>
             <SidebarGroupContent className="mt-2">
               <SidebarMenu className={`space-y-2 ${isCollapsed ? 'flex flex-col items-center w-full' : ''}`}>
                 {menuItems.map((item) => {
                   const isItemActive = isActive(item.url);
-                  
+
                   return (
                     <SidebarMenuItem key={item.title} className={isCollapsed ? 'w-full flex justify-center' : ''}>
-                      <SidebarMenuButton 
+                      <SidebarMenuButton
                         asChild
                         tooltip={isCollapsed ? item.title : undefined}
                         className={isCollapsed ? 'w-auto' : ''}
                       >
-                        <NavLink 
-                          to={item.url} 
-                          className={`group relative transition-all duration-200 ${
-                            isItemActive 
-                              ? "text-blue-700 font-semibold" 
+                        <NavLink
+                          to={item.url}
+                          className={`group relative transition-all duration-200 ${isItemActive
+                              ? "text-blue-700 font-semibold"
                               : ""
-                          } ${isCollapsed ? '' : ''} ${
-                            isItemActive 
-                              ? '' 
+                            } ${isCollapsed ? '' : ''} ${isItemActive
+                              ? ''
                               : ''
-                          }  ${isCollapsed ? 'w-14 h-14 flex items-center justify-center' : ''}`}
+                            }  ${isCollapsed ? 'w-14 h-14 flex items-center justify-center' : ''}`}
                         >
                           <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                          <div className={`flex items-center transition-all duration-200 ${
-                            isCollapsed ? 'justify-center' : 'space-x-3 py-3 px-3'
-                          } rounded-xl relative z-10`}>
-                            <div className={` ${
-                              isCollapsed ? 'p-2' : 'p-2.5'
-                            } ${
-                              isItemActive 
-                                ? 'bg-blue-500/20' 
+                          <div className={`flex items-center transition-all duration-200 ${isCollapsed ? 'justify-center' : 'space-x-3 py-3 px-3'
+                            } rounded-xl relative z-10`}>
+                            <div className={` ${isCollapsed ? 'p-2' : 'p-2.5'
+                              } ${isItemActive
+                                ? 'bg-blue-500/20'
                                 : item.bgColor
-                            }`}>
-                              <item.icon 
-                                className={`flex-shrink-0 transition-all duration-200 ${
-                                  isCollapsed ? 'h-5 w-5' : 'h-5 w-5'
-                                } ${isItemActive ? 'text-blue-600' : item.color}`} 
+                              }`}>
+                              <item.icon
+                                className={`flex-shrink-0 transition-all duration-200 ${isCollapsed ? 'h-5 w-5' : 'h-5 w-5'
+                                  } ${isItemActive ? 'text-blue-600' : item.color}`}
                               />
                             </div>
                             {!isCollapsed && (
@@ -287,9 +278,8 @@ export function AppSidebar() {
           </SidebarGroup>
 
           {/* Enhanced User Profile & Logout Section - Centered in collapsed view */}
-          <div className={`mt-auto transition-all duration-300 ${
-            isCollapsed ? 'p-2' : 'p-4'
-          } border-t border-slate-200/60 bg-gradient-to-r from-slate-50/50 to-slate-100/30`}>
+          <div className={`mt-auto transition-all duration-300 ${isCollapsed ? 'p-2' : 'p-4'
+            } border-t border-slate-200/60 bg-gradient-to-r from-slate-50/50 to-slate-100/30`}>
             {user && (
               <div className={`transition-all duration-300`}>
                 {!isCollapsed ? (

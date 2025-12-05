@@ -1,19 +1,19 @@
 // components/CRM/LeadDetails/LeadFormTab.tsx
 import React, { useState } from 'react';
-import { 
-  Save, 
-  RefreshCw, 
-  Edit3, 
-  X, 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Building, 
-  Globe, 
-  BadgeInfo, 
-  FileText, 
-  Users, 
+import {
+  Save,
+  RefreshCw,
+  Edit3,
+  X,
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  Building,
+  Globe,
+  BadgeInfo,
+  FileText,
+  Users,
   TrendingUp,
   Tag,
   Target,
@@ -115,12 +115,12 @@ const getStatusColor = (status: Lead['status']) => {
   return colors[status];
 };
 
-const LeadFormTab: React.FC<LeadFormTabProps> = ({ 
-  lead, 
-  leadId, 
-  employeeId, 
-  email, 
-  onLeadUpdate 
+const LeadFormTab: React.FC<LeadFormTabProps> = ({
+  lead,
+  leadId,
+  employeeId,
+  email,
+  onLeadUpdate
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedLead, setEditedLead] = useState<Partial<Lead>>({});
@@ -133,11 +133,11 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
   // Function to update lead
   const updateLead = async () => {
     if (!leadId || !lead || updating) return;
-    
+
     setUpdating(true);
     try {
       const { source: _, ...cleanEditedLead } = editedLead;
-      
+
       const response = await fetch('https://n8n.gopocket.in/webhook/client', {
         method: 'POST',
         headers: {
@@ -159,10 +159,10 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
       const updatedLead = { ...lead, ...cleanEditedLead };
       onLeadUpdate(updatedLead);
       updateCachedLeadDetails(leadId, updatedLead);
-      
+
       setIsEditing(false);
       setEditedLead({});
-      
+
     } catch (error) {
       console.error('Error updating lead:', error);
     } finally {
@@ -207,12 +207,12 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
   };
 
   // Compact Field Component
-  const CompactField = ({ 
-    icon: Icon, 
-    label, 
-    value, 
-    editValue, 
-    onChange, 
+  const CompactField = ({
+    icon: Icon,
+    label,
+    value,
+    editValue,
+    onChange,
     type = 'text',
     placeholder,
     options,
@@ -287,7 +287,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
         <div className="flex gap-2">
           {isEditing ? (
             <>
-              <Button 
+              <Button
                 onClick={handleUpdateLead}
                 disabled={updating}
                 size="sm"
@@ -305,7 +305,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
                   </>
                 )}
               </Button>
-              <Button 
+              <Button
                 variant="outline"
                 size="sm"
                 onClick={handleEditToggle}
@@ -315,7 +315,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
               </Button>
             </>
           ) : (
-            <Button 
+            <Button
               onClick={handleEditToggle}
               size="sm"
               className="bg-purple-600 hover:bg-purple-700"
@@ -490,7 +490,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
 
       {/* Trading Details - Collapsible */}
       <Card className="shadow-sm">
-        <CardHeader 
+        <CardHeader
           className="pb-3 cursor-pointer hover:bg-muted/50 transition-colors"
           onClick={() => toggleSection('trading')}
         >
@@ -553,7 +553,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
                   { key: 'nseFo', label: 'NSE FO' },
                   { key: 'bseCm', label: 'BSE CM' }
                 ].map((segment) => (
-                  <Badge 
+                  <Badge
                     key={segment.key}
                     variant={lead[segment.key as keyof Lead] ? "default" : "outline"}
                     className="text-xs"
@@ -569,7 +569,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
 
       {/* Additional Details - Collapsible */}
       <Card className="shadow-sm">
-        <CardHeader 
+        <CardHeader
           className="pb-3 cursor-pointer hover:bg-muted/50 transition-colors"
           onClick={() => toggleSection('additional')}
         >
