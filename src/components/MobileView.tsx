@@ -638,7 +638,6 @@ interface MobileLeadListProps {
     openDropdown: string | null;
     setOpenDropdown: (id: string | null) => void;
     changeLeadStatus: (id: string, status: string, name: string) => void;
-    onLeadAdded: () => void;
 }
 
 export const MobileLeadList: React.FC<MobileLeadListProps> = ({
@@ -651,13 +650,12 @@ export const MobileLeadList: React.FC<MobileLeadListProps> = ({
     openDropdown,
     setOpenDropdown,
     changeLeadStatus,
-    onLeadAdded,
 }) => (
     <div className="lg:hidden">
         {isInitialLoading ? (
             <LoadingState />
         ) : leads.length === 0 ? (
-            <EmptyState onLeadAdded={onLeadAdded} />
+            <EmptyState />
         ) : table.getRowModel().rows?.length === 0 ? (
             <NoResultsState />
         ) : (

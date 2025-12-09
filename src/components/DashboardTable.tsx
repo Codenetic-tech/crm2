@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import { flexRender, Table as TanStackTable } from "@tanstack/react-table";
 import { Lead } from '@/utils/crm';
-import { AddLeadDialog } from './AddLeadDialog';
 
 // Enhanced loading state
 export const LoadingState = () => (
@@ -30,12 +29,11 @@ export const LoadingState = () => (
 );
 
 // Enhanced empty state
-export const EmptyState = ({ onLeadAdded }: { onLeadAdded: () => void }) => (
+export const EmptyState = () => (
     <div className="text-center py-12">
         <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
         <h3 className="text-lg font-medium text-gray-900 mb-2">No leads assigned to you</h3>
-        <p className="text-gray-600 mb-6">You don't have any leads assigned to you at the moment.</p>
-        <AddLeadDialog onLeadAdded={onLeadAdded} />
+        <p className="text-gray-600">You don't have any leads assigned to you at the moment.</p>
     </div>
 );
 
@@ -53,7 +51,6 @@ interface DashboardTableProps {
     leads: Lead[];
     isInitialLoading: boolean;
     handleLeadClick: (leadId: string) => void;
-    onLeadAdded: () => void;
 }
 
 export const DashboardTable: React.FC<DashboardTableProps> = ({
@@ -61,7 +58,6 @@ export const DashboardTable: React.FC<DashboardTableProps> = ({
     leads,
     isInitialLoading,
     handleLeadClick,
-    onLeadAdded,
 }) => {
     return (
         <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-x-auto hidden lg:block">
@@ -108,7 +104,7 @@ export const DashboardTable: React.FC<DashboardTableProps> = ({
                                 {isInitialLoading ? (
                                     <LoadingState />
                                 ) : leads.length === 0 ? (
-                                    <EmptyState onLeadAdded={onLeadAdded} />
+                                    <EmptyState />
                                 ) : (
                                     <NoResultsState />
                                 )}

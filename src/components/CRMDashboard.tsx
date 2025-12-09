@@ -157,7 +157,7 @@ const CRMDashboard: React.FC = () => {
 
   // Refresh interval state
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState(300000); // 10 minutes default
+  const [refreshInterval, setRefreshInterval] = useState(300000); // 5 minutes default
 
   const [sorting, setSorting] = useState<SortingState>([{ id: 'createdAt', desc: true }]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -1438,7 +1438,6 @@ const CRMDashboard: React.FC = () => {
           openDropdown={openDropdown}
           setOpenDropdown={setOpenDropdown}
           changeLeadStatus={changeLeadStatus}
-          onLeadAdded={handleLeadAdded}
         />
 
         {/* Desktop View with TanStack Table */}
@@ -1447,7 +1446,6 @@ const CRMDashboard: React.FC = () => {
           leads={leads}
           isInitialLoading={isInitialLoading}
           handleLeadClick={handleLeadClick}
-          onLeadAdded={handleLeadAdded}
         />
       </div>
 

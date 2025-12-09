@@ -92,7 +92,7 @@ export const AddLeadDialog: React.FC<AddLeadDialogProps> = ({ onLeadAdded }) => 
         leadSource: ''
       });
       setIsOpen(false);
-      
+
       // Call callback if provided
       if (onLeadAdded) {
         onLeadAdded();
