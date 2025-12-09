@@ -36,9 +36,9 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
   const { user } = useAuth();
 
   // Compute hierarchy tree data in the layout
-  const hierarchyTreeData = useMemo((): TreeDataNode[] => {
+  // We use useMemo for the calculation but useEffect to sync with context to avoid "setState during render"
+  const computedHierarchyTreeData = useMemo((): TreeDataNode[] => {
     if (!user?.hierarchy) {
-      setHierarchyTreeData([]);
       return [];
     }
 
@@ -48,7 +48,6 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
       // Find the current user (hierarchy_level: 0)
       const currentUserNode = hierarchy.find(node => node.hierarchy_level === 0);
       if (!currentUserNode) {
-        setHierarchyTreeData([]);
         return [];
       }
 
@@ -141,14 +140,17 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
         ];
       }
 
-      setHierarchyTreeData(computedTree);
       return computedTree;
     } catch (error) {
       console.error('Error parsing hierarchy:', error);
-      setHierarchyTreeData([]);
       return [];
     }
-  }, [user?.hierarchy, user?.email, setHierarchyTreeData]);
+  }, [user?.hierarchy, user?.email]);
+
+  // Sync computed data to context
+  React.useEffect(() => {
+    setHierarchyTreeData(computedHierarchyTreeData);
+  }, [computedHierarchyTreeData, setHierarchyTreeData]);
 
   const handleLogout = () => {
     logout();
@@ -238,7 +240,7 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
 
         {/* Desktop Header - Hidden on mobile */}
         <div className="hidden lg:block flex-shrink-0">
-          <Header hierarchyTreeData={hierarchyTreeData} />
+          <Header hierarchyTreeData={computedHierarchyTreeData} />
         </div>
 
         {/* Main Content - Scrollable */}

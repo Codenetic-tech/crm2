@@ -112,17 +112,18 @@ export interface LightLead {
 }
 
 // Import cache functions
-import { 
-  getCachedLeads, 
-  saveLeadsToCache, 
-  getCachedLeadDetails, 
+import {
+  getCachedLeads,
+  saveLeadsToCache,
+  getCachedLeadDetails,
   saveLeadDetailsToCache,
   clearAllCache,
   getCachedTasks,
   saveTasksToCache,
   clearTasksCache,
   clearTasksCacheForLead,
-  type Task 
+  type Task,
+  updateCachedLeadDetails
 } from '@/utils/crmCache';
 
 // Function to map API status to our status
@@ -227,7 +228,7 @@ export const mapApiLeadToLead = (apiLead: APILead): Lead => {
 export const fetchLeads = async (employeeId: string, email: string, team: string): Promise<Lead[]> => {
   try {
     // Try to get from cache first
-    const cachedLeads = getCachedLeads(employeeId, email);
+    const cachedLeads = await getCachedLeads(employeeId, email);
     if (cachedLeads) {
       console.log('Returning cached leads');
       return cachedLeads;
@@ -260,33 +261,33 @@ export const fetchLeads = async (employeeId: string, email: string, team: string
     }
 
     const responseData = await response.json();
-    
+
     // Extract leads from the new response structure
     if (!responseData.message || !responseData.message.data) {
       throw new Error('Invalid response structure: missing message.data');
     }
 
     const apiLeads: APILead[] = responseData.message.data;
-    
+
     // Map API leads to our Lead interface
     const mappedLeads: Lead[] = apiLeads.map(mapApiLeadToLead);
-    
+
     // Try to save to cache, but don't fail if it doesn't work
     try {
-      saveLeadsToCache(mappedLeads, employeeId, email);
+      await saveLeadsToCache(mappedLeads, employeeId, email);
     } catch (saveError) {
       console.warn('Failed to save leads to cache:', saveError);
-      // Clear cache and try one more time
+      // If we get a quota error, clear cache and try one more time
       if (saveError instanceof DOMException && saveError.name === 'QuotaExceededError') {
-        clearAllCache();
+        await clearAllCache();
         try {
-          saveLeadsToCache(mappedLeads, employeeId, email);
+          await saveLeadsToCache(mappedLeads, employeeId, email);
         } catch (retryError) {
           console.warn('Failed to save leads to cache after clearing:', retryError);
         }
       }
     }
-    
+
     return mappedLeads;
   } catch (error) {
     console.error('Error fetching leads:', error);
@@ -298,7 +299,7 @@ export const fetchLeads = async (employeeId: string, email: string, team: string
 export const getLeadById = async (leadId: string, employeeId: string, email: string, team: string): Promise<Lead | null> => {
   try {
     // Check cache first
-    const cachedLead = getCachedLeadDetails(leadId);
+    const cachedLead = await getCachedLeadDetails(leadId);
     if (cachedLead) {
       console.log('Returning cached lead details');
       return cachedLead;
@@ -307,16 +308,16 @@ export const getLeadById = async (leadId: string, employeeId: string, email: str
     // If not in cache, fetch from API
     const leads = await fetchLeads(employeeId, email, team);
     const lead = leads.find(lead => lead.id === leadId) || null;
-    
+
     // Save to cache if found
     if (lead) {
       try {
-        saveLeadDetailsToCache(leadId, lead);
+        await saveLeadDetailsToCache(leadId, lead);
       } catch (saveError) {
         console.warn('Failed to save lead details to cache:', saveError);
       }
     }
-    
+
     return lead;
   } catch (error) {
     console.error('Error getting lead by ID:', error);
@@ -327,35 +328,18 @@ export const getLeadById = async (leadId: string, employeeId: string, email: str
 // Update refreshLeads to accept team parameter
 export const refreshLeads = async (employeeId: string, email: string, team: string): Promise<Lead[]> => {
   // Clear cache
-  clearAllCache();
+  await clearAllCache();
   return fetchLeads(employeeId, email, team);
 };
 
 // Update lead status
-export const updateLeadStatus = (leadId: string, newStatus: Lead['status']): void => {
+export const updateLeadStatus = async (leadId: string, newStatus: Lead['status']): Promise<void> => {
   try {
-    // Update leads cache
-    const leadsCache = localStorage.getItem('crm_leads_cache');
-    if (leadsCache) {
-      const cachedData = JSON.parse(leadsCache);
-      const updatedLeads = cachedData.data.map((lead: Lead) =>
-        lead.id === leadId 
-          ? { ...lead, status: newStatus, lastActivity: 'Just now' }
-          : lead
-      );
-      cachedData.data = updatedLeads;
-      localStorage.setItem('crm_leads_cache', JSON.stringify(cachedData));
-    }
-
     // Update lead details cache
-    const detailsCache = localStorage.getItem('crm_lead_details_cache');
-    if (detailsCache) {
-      const cachedData: { [key: string]: { lead: Lead; timestamp: number } } = JSON.parse(detailsCache);
-      if (cachedData[leadId]) {
-        cachedData[leadId].lead.status = newStatus;
-        cachedData[leadId].lead.lastActivity = 'Just now';
-        localStorage.setItem('crm_lead_details_cache', JSON.stringify(cachedData));
-      }
+    const cachedLead = await getCachedLeadDetails(leadId);
+    if (cachedLead) {
+      const updatedLead = { ...cachedLead, status: newStatus, lastActivity: 'Just now' };
+      await updateCachedLeadDetails(leadId, updatedLead);
     }
   } catch (error) {
     console.error('Error updating lead status:', error);

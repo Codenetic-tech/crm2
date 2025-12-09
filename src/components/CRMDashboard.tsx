@@ -14,9 +14,10 @@ import {
 } from "@/components/ui/tooltip"
 import { Tooltip } from '@radix-ui/react-tooltip';
 
-// Import the actual useAuth hook and fetchLeads function
+// Import the actual useAuth hook
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchLeads, refreshLeads, type Lead, clearAllCache } from '@/utils/crm';
+import { useLeads } from '@/contexts/LeadContext';
+import { type Lead, clearAllCache } from '@/utils/crm';
 import { SummaryCard } from './SummaryCard';
 import { AddLeadDialog } from './AddLeadDialog';
 import CommentModal from '@/components/CRM/CommentModal';
@@ -62,6 +63,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Import Refactored Components
 import {
@@ -129,59 +137,52 @@ const assignedUserFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string
 };
 
 const CRMDashboard: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
+  const { leads, isLoading: isLeadsLoading, isRefreshing: isLeadsRefreshing, refreshLeads, updateLead } = useLeads();
+  const navigate = useNavigate();
 
-  const [leads, setLeads] = useState<Lead[]>([]);
+  // Map context state to local names
+  const isInitialLoading = isLeadsLoading;
+  const isManualRefreshing = isLeadsRefreshing;
 
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
-  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState(900); // 15 minutes in seconds
+  // Local UI State
   const [error, setError] = useState<string | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'syncing'>('connected');
-  const [newRecordsCount, setNewRecordsCount] = useState(0);
-  const [modifiedRecordsCount, setModifiedRecordsCount] = useState(0);
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [isChangingStatus, setIsChangingStatus] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Filter states
-  const [selectedCampaign, setSelectedCampaign] = useState<string>('');
-  const [selectedSource, setSelectedSource] = useState<string>('');
-  const [selectedAssignedUser, setSelectedAssignedUser] = useState<string>('');
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [selectedLeadForComment, setSelectedLeadForComment] = useState<Lead | null>(null);
+  const [newComment, setNewComment] = useState('');
+  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
+  const [isPostingComment, setIsPostingComment] = useState(false);
 
-  // Rate limiting state
+  // Refresh interval state
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refreshInterval, setRefreshInterval] = useState(300000); // 10 minutes default
+
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'createdAt', desc: true }]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+
+  // Missing states for filters and refresh
+  const [globalFilter, setGlobalFilter] = useState('');
+  const [selectedCampaign, setSelectedCampaign] = useState('all');
+  const [selectedSource, setSelectedSource] = useState('all');
+  const [selectedAssignedUser, setSelectedAssignedUser] = useState('all');
   const [lastRefreshTime, setLastRefreshTime] = useState<number | null>(null);
-  const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const cooldownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Bulk action state
-  const [selectedTeamMember, setSelectedTeamMember] = useState('');
-  const [isAssigning, setIsAssigning] = useState(false);
-
-  // Mobile specific states
+  // Mobile menu states
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [mobileColumnVisibilityOpen, setMobileColumnVisibilityOpen] = useState(false);
 
-  // Refs
-  const lastFetchedData = useRef<Lead[]>([]);
-  const autoRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const cooldownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Bulk Assign State
+  const [selectedTeamMember, setSelectedTeamMember] = useState<string>("");
+  const [isAssigning, setIsAssigning] = useState(false);
 
-  // Comment state
-  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
-  const [selectedLeadForComment, setSelectedLeadForComment] = useState<Lead | null>(null);
-  const [newComment, setNewComment] = useState('');
-  const [isPostingComment, setIsPostingComment] = useState(false);
+  // Changed to string | false to hold the ID of the lead being changed, or false if none
+  const [isChangingStatus, setIsChangingStatus] = useState<string | false>(false);
 
-  // TanStack Table state
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'createdAt', desc: true }]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [globalFilter, setGlobalFilter] = useState('');
-
-  // 1. Fix the initial state to load from localStorage
+  // Column Visibility State with Local Storage
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -198,7 +199,58 @@ const CRMDashboard: React.FC = () => {
     };
   });
 
-  // 2. Keep the useEffect to persist changes
+
+
+  // Connection and Refresh States
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'syncing' | 'disconnected'>('connected');
+  const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
+  const [canRefresh, setCanRefresh] = useState(true);
+
+  const handleRateLimitedRefresh = async () => {
+    if (!canRefresh) return;
+
+    setCanRefresh(false);
+    setCooldownRemaining(REFRESH_COOLDOWN_MS / 1000);
+
+    try {
+      await handleClearCacheAndRefresh();
+    } finally {
+      // Start cooldown timer
+      if (cooldownIntervalRef.current) clearInterval(cooldownIntervalRef.current);
+
+      cooldownIntervalRef.current = setInterval(() => {
+        setCooldownRemaining(prev => {
+          if (prev <= 1) {
+            if (cooldownIntervalRef.current) clearInterval(cooldownIntervalRef.current);
+            setCanRefresh(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+  };
+
+  // Auto-refresh effect
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+
+    if (autoRefresh && refreshInterval > 0) {
+      intervalId = setInterval(() => {
+        if (canRefresh && !isLeadsRefreshing) {
+          handleRateLimitedRefresh();
+        }
+      }, refreshInterval);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [autoRefresh, refreshInterval, canRefresh, isLeadsRefreshing]);
+
+  // Persist column visibility
+
+  // Persist column visibility
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -209,10 +261,16 @@ const CRMDashboard: React.FC = () => {
     }
   }, [columnVisibility]);
 
+  const handleClearCacheAndRefresh = async () => {
+    try {
+      await refreshLeads();
+    } catch (err) {
+      console.error("Failed to refresh leads:", err);
+    }
+  };
+
   const [rowSelection, setRowSelection] = useState({});
 
-
-  // Get actual user credentials from auth context
   const employeeId = user?.employeeId || '';
   const email = user?.email || '';
   const teamMembers = user?.team ? JSON.parse(user.team) : [];
@@ -824,72 +882,10 @@ const CRMDashboard: React.FC = () => {
     if (selectedAssignedUser && selectedAssignedUser !== 'all') {
       table.getColumn('_assign')?.setFilterValue(selectedAssignedUser);
     } else {
+      // Clear the filter when "All Users" is selected
       table.getColumn('_assign')?.setFilterValue('');
     }
   }, [selectedAssignedUser, table]);
-
-  // Rate limiting functions
-  const canRefresh = useMemo(() => {
-    if (!lastRefreshTime) return true;
-    const timeSinceLastRefresh = Date.now() - lastRefreshTime;
-    const canRefreshNow = timeSinceLastRefresh >= REFRESH_COOLDOWN_MS;
-
-    if (canRefreshNow && cooldownIntervalRef.current) {
-      clearInterval(cooldownIntervalRef.current);
-      cooldownIntervalRef.current = null;
-      setCooldownRemaining(0);
-    }
-
-    return canRefreshNow;
-  }, [lastRefreshTime, cooldownRemaining]);
-
-  const getCooldownRemaining = () => {
-    if (!lastRefreshTime) return 0;
-    const timeSinceLastRefresh = Date.now() - lastRefreshTime;
-    return Math.max(0, REFRESH_COOLDOWN_MS - timeSinceLastRefresh);
-  };
-
-  const formatCooldownTime = (ms: number) => {
-    const seconds = Math.ceil(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
-
-  // Update the cooldown timer effect
-  useEffect(() => {
-    if (cooldownIntervalRef.current) {
-      clearInterval(cooldownIntervalRef.current);
-      cooldownIntervalRef.current = null;
-    }
-
-    if (lastRefreshTime && !canRefresh) {
-      const initialRemaining = getCooldownRemaining();
-      setCooldownRemaining(initialRemaining);
-
-      cooldownIntervalRef.current = setInterval(() => {
-        const remaining = getCooldownRemaining();
-        setCooldownRemaining(remaining);
-
-        if (remaining <= 0) {
-          if (cooldownIntervalRef.current) {
-            clearInterval(cooldownIntervalRef.current);
-            cooldownIntervalRef.current = null;
-          }
-          setCooldownRemaining(0);
-        }
-      }, 1000);
-    } else {
-      setCooldownRemaining(0);
-    }
-
-    return () => {
-      if (cooldownIntervalRef.current) {
-        clearInterval(cooldownIntervalRef.current);
-        cooldownIntervalRef.current = null;
-      }
-    };
-  }, [lastRefreshTime, canRefresh]);
 
   // Function to change lead status
   const changeLeadStatus = async (leadId: string, newStatus: string, leadName: string) => {
@@ -920,13 +916,10 @@ const CRMDashboard: React.FC = () => {
       const result = await response.json();
       console.log('Status change response:', result);
 
-      setLeads(prevLeads =>
-        prevLeads.map(lead =>
-          lead.id === leadId
-            ? { ...lead, status: newStatus as Lead['status'] }
-            : lead
-        )
-      );
+      const leadToUpdate = leads.find(l => l.id === leadId);
+      if (leadToUpdate) {
+        updateLead({ ...leadToUpdate, status: newStatus as Lead['status'] });
+      }
 
       console.log(`Status changed to ${newStatus} for lead: ${leadName}`);
 
@@ -934,7 +927,7 @@ const CRMDashboard: React.FC = () => {
       console.error('Error changing lead status:', error);
       setError(`Failed to change status: ${error.message}`);
     } finally {
-      setIsChangingStatus(null);
+      setIsChangingStatus(false);
       handleClearCacheAndRefresh();
     }
   };
@@ -1059,213 +1052,58 @@ const CRMDashboard: React.FC = () => {
     );
   };
 
-  // Fetch all leads function
-  const fetchAllLeads = async (isAutoRefresh = false, isManualRefresh = false) => {
-    try {
-      if (isAutoRefresh) {
-        setIsAutoRefreshing(true);
-        setConnectionStatus('syncing');
-      } else if (isManualRefresh) {
-        setIsManualRefreshing(true);
-        setConnectionStatus('syncing');
-      } else {
-        setIsInitialLoading(true);
-      }
 
-      setError(null);
 
-      const apiLeads = await fetchLeads(employeeId, email, user.team);
-
-      if (isAutoRefresh && lastFetchedData.current.length > 0) {
-        // Incremental update logic
-        const currentDataMap = new Map(lastFetchedData.current.map(lead => [lead.id, getLeadContentHash(lead)]));
-        const newDataMap = new Map(apiLeads.map(lead => [lead.id, getLeadContentHash(lead)]));
-
-        let newCount = 0;
-        let modifiedCount = 0;
-
-        const cleanCurrentData = lastFetchedData.current.map(lead => ({
-          ...lead,
-          _isNew: false,
-          _isModified: false
-        }));
-
-        const currentDataById = new Map(cleanCurrentData.map(lead => [lead.id, lead]));
-
-        const updatedLeads: Lead[] = [];
-
-        apiLeads.forEach(newLead => {
-          const leadId = newLead.id;
-          const newContentHash = newDataMap.get(leadId);
-          const oldContentHash = currentDataMap.get(leadId);
-          const existingLead = currentDataById.get(leadId);
-
-          if (!existingLead) {
-            newLead._isNew = true;
-            updatedLeads.push(newLead);
-            newCount++;
-          } else if (oldContentHash !== newContentHash) {
-            newLead._isModified = true;
-            updatedLeads.push(newLead);
-            modifiedCount++;
-          } else {
-            updatedLeads.push(existingLead);
-          }
-        });
-
-        updatedLeads.sort((a, b) => {
-          const timeA = new Date(a.createdAt).getTime();
-          const timeB = new Date(b.createdAt).getTime();
-          return timeB - timeA;
-        });
-
-        setLeads(updatedLeads);
-        lastFetchedData.current = updatedLeads.map(lead => ({
-          ...lead,
-          _isNew: false,
-          _isModified: false
-        }));
-
-        setNewRecordsCount(newCount);
-        setModifiedRecordsCount(modifiedCount);
-
-        setTimeout(() => {
-          setLeads(prev => prev.map(lead => ({
-            ...lead,
-            _isNew: false,
-            _isModified: false
-          })));
-        }, 5000);
-
-        setConnectionStatus('connected');
-      } else {
-        // Full refresh for initial load
-        const sortedLeads = apiLeads.sort((a, b) => {
-          const timeA = new Date(a.createdAt).getTime();
-          const timeB = new Date(b.createdAt).getTime();
-          return timeB - timeA;
-        });
-
-        setLeads(sortedLeads);
-        lastFetchedData.current = sortedLeads;
-        setNewRecordsCount(0);
-        setModifiedRecordsCount(0);
-        setConnectionStatus('connected');
-      }
-
-      setLastUpdated(new Date());
-    } catch (error: any) {
-      console.error('Error fetching leads:', error);
-      if (error.message.includes('Failed to fetch') || error.message.includes('JSON')) {
-        setError('Unable to load leads. Please check your connection and try again.');
-      } else {
-        setError(`Failed to fetch leads: ${error.message}`);
-      }
-      setConnectionStatus('disconnected');
-    } finally {
-      setIsInitialLoading(false);
-      setIsAutoRefreshing(false);
-      setIsManualRefreshing(false);
-    }
-  };
-
-  // Helper function to get lead content hash for comparison
-  const getLeadContentHash = (lead: Lead): string => {
-    const keys: (keyof Lead)[] = ['name', 'email', 'phone', 'company', 'status', 'value', 'assignedTo', 'lastActivity'];
-    return keys.map(key => String(lead[key] || '')).join('|');
-  };
-
-  // Rate-limited refresh function
-  const handleRateLimitedRefresh = async () => {
-    if (!canRefresh) {
-      setError(`Please wait ${formatCooldownTime(cooldownRemaining)} before refreshing again`);
-      return;
-    }
-
-    setLastRefreshTime(Date.now());
-    await handleClearCacheAndRefresh();
-  };
-
-  // Modified clear cache and refresh function
-  const handleClearCacheAndRefresh = async () => {
-    if (!employeeId || !email) return;
-
-    clearAllCache();
-    await refreshLeads(employeeId, email, user.team);
-    await fetchAllLeads(false, true);
-  };
-
-  // Load data on mount
-  useEffect(() => {
-    if (employeeId && email) {
-      fetchAllLeads(false);
-    }
-  }, [employeeId, email]);
-
-  // Auto-refresh effect
-  useEffect(() => {
-    if (autoRefreshTimeoutRef.current) {
-      clearTimeout(autoRefreshTimeoutRef.current);
-    }
-
-    if (autoRefresh && !isInitialLoading && employeeId && email) {
-      const scheduleNextRefresh = () => {
-        autoRefreshTimeoutRef.current = setTimeout(() => {
-          handleClearCacheAndRefresh().finally(() => {
-            scheduleNextRefresh();
-          });
-        }, refreshInterval * 1000);
-      };
-
-      scheduleNextRefresh();
-    }
-
-    return () => {
-      if (autoRefreshTimeoutRef.current) {
-        clearTimeout(autoRefreshTimeoutRef.current);
-      }
-    };
-  }, [autoRefresh, refreshInterval, isInitialLoading, employeeId, email]);
-
-  // Calculate summary data based on filtered leads
-  const summaryData: SummaryData = useMemo(() => {
-    // Get the currently filtered leads from the table
-    const filteredLeads = table.getFilteredRowModel().rows.map(row => row.original);
-
-    if (isInitialLoading && filteredLeads.length === 0) {
+  const summaryData = useMemo(() => {
+    if (isLeadsLoading) {
       return {
         totalLeads: 0,
         newLeads: 0,
         contactedLeads: 0,
         followup: 0,
         qualifiedLeads: 0,
+        wonleads: 0,
         totalValue: 0,
         conversionRate: 0,
+        firstTradedClients: 0,
         notinterested: 0,
         existingclient: 0,
         rnr: 0,
         switchoff: 0,
         callback: 0,
         won: 0,
+        newRecordsCount: 0,
+        modifiedRecordsCount: 0
       };
     }
 
+    // Get filtered leads from table
+    const currentLeads = table.getFilteredRowModel().rows.map(row => row.original);
+
+    // Calculate summary from filtered leads
     return {
-      totalLeads: filteredLeads.length,
-      existingclient: leads.filter(lead => lead.status === 'won').length,
-      won: filteredLeads.filter(lead => lead.status === 'won').length,
-      newLeads: filteredLeads.filter(lead => lead.status === 'new').length,
-      contactedLeads: filteredLeads.filter(lead => lead.status === 'Contacted').length,
-      rnr: filteredLeads.filter(lead => lead.status === 'RNR').length,
-      switchoff: filteredLeads.filter(lead => lead.status === 'Switch off').length,
-      callback: filteredLeads.filter(lead => lead.status === 'Call Back').length,
-      followup: filteredLeads.filter(lead => lead.status === 'followup').length,
-      qualifiedLeads: filteredLeads.filter(lead => lead.status === 'qualified').length,
-      notinterested: filteredLeads.filter(lead => lead.status === 'Not Interested').length,
-      totalValue: filteredLeads.reduce((sum, lead) => sum + lead.value, 0),
-      conversionRate: Math.round((filteredLeads.filter(lead => ['qualified', 'negotiation', 'won'].includes(lead.status)).length / Math.max(filteredLeads.length, 1)) * 100),
+      totalLeads: currentLeads.length,
+      newLeads: currentLeads.filter(l => l.status === 'new').length,
+      contactedLeads: currentLeads.filter(l => l.status === 'Contacted').length,
+      followup: currentLeads.filter(l => l.status === 'followup').length,
+      qualifiedLeads: currentLeads.filter(l => l.status === 'qualified').length,
+      wonleads: currentLeads.filter(l => l.status === 'won').length,
+      totalValue: currentLeads.reduce((acc, curr) => acc + (curr.value || 0), 0),
+      conversionRate: 0, // Calculate as needed
+      firstTradedClients: currentLeads.filter(l => l.tradeDone === "TRUE").length,
+      notinterested: currentLeads.filter(l => l.status === 'Not Interested').length,
+      existingclient: currentLeads.filter(l => l.status === 'won').length,
+      rnr: currentLeads.filter(l => l.status === 'RNR').length,
+      switchoff: currentLeads.filter(l => l.status === 'Switch off').length,
+      callback: currentLeads.filter(l => l.status === 'Call Back').length,
+      won: currentLeads.filter(l => l.status === 'won').length,
+      newRecordsCount: 0,
+      modifiedRecordsCount: 0
     };
-  }, [table.getFilteredRowModel().rows, isInitialLoading]);
+
+  }, [leads, isLeadsLoading, columnFilters, globalFilter, table]);
+
+
 
   const handleLeadClick = (leadId: string) => {
     if (table.getFilteredSelectedRowModel().rows.length === 0) {
@@ -1273,8 +1111,8 @@ const CRMDashboard: React.FC = () => {
     }
   };
 
-  const handleLeadAdded = () => {
-    handleClearCacheAndRefresh();
+  const handleLeadAdded = async () => {
+    await handleClearCacheAndRefresh();
   };
 
   const toggleDropdown = (leadId: string, e: React.MouseEvent) => {
@@ -1374,17 +1212,7 @@ const CRMDashboard: React.FC = () => {
             </h1>
           </div>
 
-          {lastUpdated && (
-            <div className="flex items-center gap-4 text-xs sm:text-sm">
-              {(newRecordsCount > 0 || modifiedRecordsCount > 0) && (
-                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
-                  {newRecordsCount > 0 && `${newRecordsCount} new`}
-                  {newRecordsCount > 0 && modifiedRecordsCount > 0 && ', '}
-                  {modifiedRecordsCount > 0 && `${modifiedRecordsCount} updated`}
-                </span>
-              )}
-            </div>
-          )}
+
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
           {/* Auto Refresh Toggle */}
@@ -1399,16 +1227,21 @@ const CRMDashboard: React.FC = () => {
             <label htmlFor="autoRefresh" className="text-sm text-gray-700">Auto Refresh</label>
           </div>
           {/* Refresh Interval Select */}
-          <select
-            value={refreshInterval}
-            onChange={(e) => setRefreshInterval(Number(e.target.value))}
-            className="text-sm border border-gray-300 rounded-md px-3 py-2"
+          {/* Refresh Interval Select */}
+          <Select
+            value={refreshInterval.toString()}
+            onValueChange={(value) => setRefreshInterval(Number(value))}
           >
-            <option value={60}>1 min</option>
-            <option value={300}>5 min</option>
-            <option value={600}>10 min</option>
-            <option value={900}>15 min</option>
-          </select>
+            <SelectTrigger className="w-[120px] h-9">
+              <SelectValue placeholder="Interval" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="60000">1 min</SelectItem>
+              <SelectItem value="300000">5 min</SelectItem>
+              <SelectItem value="600000">10 min</SelectItem>
+              <SelectItem value="900000">15 min</SelectItem>
+            </SelectContent>
+          </Select>
 
           {/* Use the new RefreshButton component */}
           <RefreshButton />
@@ -1601,7 +1434,7 @@ const CRMDashboard: React.FC = () => {
           table={table}
           handleLeadClick={handleLeadClick}
           toggleDropdown={toggleDropdown}
-          isChangingStatus={isChangingStatus}
+          isChangingStatus={typeof isChangingStatus === 'string' ? isChangingStatus : undefined}
           openDropdown={openDropdown}
           setOpenDropdown={setOpenDropdown}
           changeLeadStatus={changeLeadStatus}

@@ -52,8 +52,6 @@ const indianLanguages = [
 // Status options for the dropdown
 const statusOptions = [
   { value: 'new', label: 'New' },
-  { value: 'Contacted', label: 'Contacted' },
-  { value: 'qualified', label: 'Qualified' },
   { value: 'followup', label: 'Followup' },
   { value: 'Not Interested', label: 'Not Interested' },
   { value: 'Call Back', label: 'Call Back' },
@@ -158,7 +156,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
 
       const updatedLead = { ...lead, ...cleanEditedLead };
       onLeadUpdate(updatedLead);
-      updateCachedLeadDetails(leadId, updatedLead);
+      await updateCachedLeadDetails(leadId, updatedLead);
 
       setIsEditing(false);
       setEditedLead({});
@@ -272,7 +270,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
           </div>
           <div>
             <h2 className="text-xl font-semibold">{lead.name}</h2>
-            <p className="text-sm text-muted-foreground flex items-center gap-2 mt-0.5">
+            <div className="text-sm text-muted-foreground flex items-center gap-2 mt-0.5">
               <Mail className="w-3 h-3" />
               {lead.email}
               <span className="mx-1">•</span>
@@ -281,7 +279,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
               <Badge variant="outline" className="px-3 py-1">
                 {lead.industry}
               </Badge>
-            </p>
+            </div>
           </div>
         </div>
         <div className="flex gap-2">

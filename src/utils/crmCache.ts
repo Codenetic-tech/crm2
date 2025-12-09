@@ -1,180 +1,169 @@
 // utils/crmCache.ts
 import { type Lead } from '@/utils/crm';
 
-interface CachedLeadData {
-  leads: Lead[];
-  timestamp: number;
-  employeeId: string;
-  email: string;
-}
-
-interface CachedLeadDetails {
-  [leadId: string]: {
-    lead: Lead;
-    timestamp: number;
-  };
-}
-
-const LEADS_CACHE_KEY = 'crm_leads_cache';
-const LEAD_DETAILS_CACHE_KEY = 'crm_lead_details_cache';
+const DB_NAME = 'CRM_DB';
+const DB_VERSION = 2; // Increment version for new stores if needed
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
-// Cache size management
-const MAX_CACHE_SIZE = 4 * 1024 * 1024; // 4MB
-const MAX_LEADS_IN_DETAILS_CACHE = 100; // Keep only recent 100 leads in details cache
-
-// Add function to calculate cache size
-const getCacheSize = (): number => {
-  let total = 0;
-  for (const key in localStorage) {
-    if (localStorage.hasOwnProperty(key)) {
-      total += localStorage[key].length * 2; // *2 because UTF-16
-    }
-  }
-  return total;
-};
-
-// Add function to clean up old cache entries
-const cleanupOldCacheEntries = (): void => {
-  try {
-    // Clean up lead details cache - keep only recent ones
-    const detailsCache = localStorage.getItem(LEAD_DETAILS_CACHE_KEY);
-    if (detailsCache) {
-      const cachedData: CachedLeadDetails = JSON.parse(detailsCache);
-      const entries = Object.entries(cachedData);
-      
-      if (entries.length > MAX_LEADS_IN_DETAILS_CACHE) {
-        // Sort by timestamp (newest first) and keep only the most recent ones
-        entries.sort((a, b) => b[1].timestamp - a[1].timestamp);
-        const newCache: CachedLeadDetails = {};
-        
-        entries.slice(0, MAX_LEADS_IN_DETAILS_CACHE).forEach(([key, value]) => {
-          newCache[key] = value;
-        });
-        
-        localStorage.setItem(LEAD_DETAILS_CACHE_KEY, JSON.stringify(newCache));
-        console.log(`Cleaned up lead details cache: ${entries.length} -> ${Object.keys(newCache).length}`);
-      }
-    }
-
-    // Check total cache size and clear if needed
-    const totalSize = getCacheSize();
-    if (totalSize > MAX_CACHE_SIZE) {
-      console.warn(`Cache size (${totalSize} bytes) exceeds limit, clearing cache`);
-      clearAllCache();
-    }
-  } catch (error) {
-    console.error('Error cleaning up cache:', error);
-  }
-};
-
-export const getCachedLeads = (employeeId: string, email: string): Lead[] | null => {
-  try {
-    const cached = localStorage.getItem(LEADS_CACHE_KEY);
-    if (!cached) return null;
-
-    const cachedData: CachedLeadData = JSON.parse(cached);
-    const isExpired = Date.now() - cachedData.timestamp > CACHE_DURATION;
-    const isSameUser = cachedData.employeeId === employeeId && cachedData.email === email;
-
-    if (isExpired || !isSameUser) {
-      localStorage.removeItem(LEADS_CACHE_KEY);
-      return null;
-    }
-
-    return cachedData.leads;
-  } catch (error) {
-    console.error('Error reading leads cache:', error);
-    return null;
-  }
-};
-
-export const saveLeadsToCache = (leads: Lead[], employeeId: string, email: string): void => {
-  try {
-    // Clean up before saving new data
-    cleanupOldCacheEntries();
-    
-    const cacheData: CachedLeadData = {
-      leads,
-      timestamp: Date.now(),
-      employeeId,
-      email
-    };
-    
-    // Only save essential data for the leads list (without duplicating in details cache)
-    localStorage.setItem(LEADS_CACHE_KEY, JSON.stringify(cacheData));
-
-    // Don't save each lead to details cache here to avoid duplication
-    // The details cache should only be populated when individual lead details are fetched
-    
-  } catch (error) {
-    console.error('Error saving leads to cache:', error);
-    // If we get a quota error, clear some cache and retry
-    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-      console.warn('Storage quota exceeded, clearing cache');
-      clearAllCache();
-    }
-  }
-};
-
-export const getCachedLeadDetails = (leadId: string): Lead | null => {
-  try {
-    const cached = localStorage.getItem(LEAD_DETAILS_CACHE_KEY);
-    if (!cached) return null;
-
-    const cachedData: CachedLeadDetails = JSON.parse(cached);
-    const leadCache = cachedData[leadId];
-    
-    if (!leadCache) return null;
-    
-    const isExpired = Date.now() - leadCache.timestamp > CACHE_DURATION;
-    if (isExpired) {
-      delete cachedData[leadId];
-      localStorage.setItem(LEAD_DETAILS_CACHE_KEY, JSON.stringify(cachedData));
-      return null;
-    }
-
-    return leadCache.lead;
-  } catch (error) {
-    console.error('Error reading lead details cache:', error);
-    return null;
-  }
-};
-
-export const saveLeadDetailsToCache = (leadId: string, lead: Lead): void => {
-  try {
-    const cached = localStorage.getItem(LEAD_DETAILS_CACHE_KEY);
-    const cachedData: CachedLeadDetails = cached ? JSON.parse(cached) : {};
-    
-    cachedData[leadId] = {
-      lead,
-      timestamp: Date.now()
-    };
-    
-    localStorage.setItem(LEAD_DETAILS_CACHE_KEY, JSON.stringify(cachedData));
-  } catch (error) {
-    console.error('Error saving lead details to cache:', error);
-  }
-};
-
-export const clearAllCache = (): void => {
-  localStorage.removeItem(LEADS_CACHE_KEY);
-  localStorage.removeItem(LEAD_DETAILS_CACHE_KEY);
-};
-
-export const clearLeadDetailsCache = (): void => {
-  localStorage.removeItem(LEAD_DETAILS_CACHE_KEY);
-};
-
-interface CachedCommentsData {
-  [leadId: string]: {
-    comments: Comment[];
-    timestamp: number;
-  };
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  id: string; // Key for the store
 }
 
-const COMMENTS_CACHE_KEY = 'crm_comments_cache';
+// Store names
+const STORES = {
+  LEADS: 'leads',
+  LEAD_DETAILS: 'lead_details',
+  COMMENTS: 'comments',
+  TASKS: 'tasks'
+};
 
+// Open Database
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+
+      // Create stores if they don't exist
+      if (!db.objectStoreNames.contains(STORES.LEADS)) {
+        db.createObjectStore(STORES.LEADS, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORES.LEAD_DETAILS)) {
+        db.createObjectStore(STORES.LEAD_DETAILS, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORES.COMMENTS)) {
+        db.createObjectStore(STORES.COMMENTS, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORES.TASKS)) {
+        db.createObjectStore(STORES.TASKS, { keyPath: 'id' });
+      }
+    };
+  });
+};
+
+// Generic get function
+const getFromStore = async <T>(storeName: string, key: string): Promise<T | null> => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction(storeName, 'readonly');
+    const store = transaction.objectStore(storeName);
+    const request = store.get(key);
+
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => {
+        const result = request.result as CacheEntry<T>;
+        if (!result) {
+          resolve(null);
+          return;
+        }
+
+        const isExpired = Date.now() - result.timestamp > CACHE_DURATION;
+        if (isExpired) {
+          // Fire and forget delete
+          deleteFromStore(storeName, key).catch(console.error);
+          resolve(null);
+        } else {
+          resolve(result.data);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error(`Error reading from ${storeName}:`, error);
+    return null;
+  }
+};
+
+// Generic put function
+const putToStore = async <T>(storeName: string, key: string, data: T): Promise<void> => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction(storeName, 'readwrite');
+    const store = transaction.objectStore(storeName);
+
+    const entry: CacheEntry<T> = {
+      id: key,
+      data,
+      timestamp: Date.now()
+    };
+
+    const request = store.put(entry);
+
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error(`Error writing to ${storeName}:`, error);
+  }
+};
+
+// Generic delete function
+const deleteFromStore = async (storeName: string, key: string): Promise<void> => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction(storeName, 'readwrite');
+    const store = transaction.objectStore(storeName);
+    const request = store.delete(key);
+
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error(`Error deleting from ${storeName}:`, error);
+  }
+};
+
+// Clear store function
+const clearStore = async (storeName: string): Promise<void> => {
+  try {
+    const db = await openDB();
+    const transaction = db.transaction(storeName, 'readwrite');
+    const store = transaction.objectStore(storeName);
+    const request = store.clear();
+
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error(`Error clearing ${storeName}:`, error);
+  }
+};
+
+
+// LEADS
+export const getCachedLeads = async (employeeId: string, email: string): Promise<Lead[] | null> => {
+  const key = `${employeeId}_${email}`;
+  return getFromStore<Lead[]>(STORES.LEADS, key);
+};
+
+export const saveLeadsToCache = async (leads: Lead[], employeeId: string, email: string): Promise<void> => {
+  const key = `${employeeId}_${email}`;
+  return putToStore(STORES.LEADS, key, leads);
+};
+
+// LEAD DETAILS
+export const getCachedLeadDetails = async (leadId: string): Promise<Lead | null> => {
+  return getFromStore<Lead>(STORES.LEAD_DETAILS, leadId);
+};
+
+export const saveLeadDetailsToCache = async (leadId: string, lead: Lead): Promise<void> => {
+  return putToStore(STORES.LEAD_DETAILS, leadId, lead);
+};
+
+export const updateCachedLeadDetails = async (leadId: string, updatedLead: Lead): Promise<void> => {
+  return putToStore(STORES.LEAD_DETAILS, leadId, updatedLead);
+};
+
+// COMMENTS
 export interface Comment {
   name: string;
   owner: string;
@@ -197,51 +186,20 @@ export interface Comment {
   doctype?: string;
 }
 
-export const getCachedComments = (leadId: string): Comment[] | null => {
-  try {
-    const cached = localStorage.getItem(COMMENTS_CACHE_KEY);
-    if (!cached) return null;
-
-    const cachedData: CachedCommentsData = JSON.parse(cached);
-    const commentCache = cachedData[leadId];
-    
-    if (!commentCache) return null;
-    
-    const isExpired = Date.now() - commentCache.timestamp > CACHE_DURATION;
-    if (isExpired) {
-      delete cachedData[leadId];
-      localStorage.setItem(COMMENTS_CACHE_KEY, JSON.stringify(cachedData));
-      return null;
-    }
-
-    return commentCache.comments;
-  } catch (error) {
-    console.error('Error reading comments cache:', error);
-    return null;
-  }
+export const getCachedComments = async (leadId: string): Promise<Comment[] | null> => {
+  return getFromStore<Comment[]>(STORES.COMMENTS, leadId);
 };
 
-export const saveCommentsToCache = (leadId: string, comments: Comment[]): void => {
-  try {
-    const cached = localStorage.getItem(COMMENTS_CACHE_KEY);
-    const cachedData: CachedCommentsData = cached ? JSON.parse(cached) : {};
-    
-    cachedData[leadId] = {
-      comments,
-      timestamp: Date.now()
-    };
-    
-    localStorage.setItem(COMMENTS_CACHE_KEY, JSON.stringify(cachedData));
-  } catch (error) {
-    console.error('Error saving comments to cache:', error);
-  }
+export const saveCommentsToCache = async (leadId: string, comments: Comment[]): Promise<void> => {
+  return putToStore(STORES.COMMENTS, leadId, comments);
 };
 
-export const clearCommentsCache = (): void => {
-  localStorage.removeItem(COMMENTS_CACHE_KEY);
+export const clearCommentsCache = async (): Promise<void> => {
+  return clearStore(STORES.COMMENTS);
 };
 
-// Add Task interface (same as in LeadTasksTab.tsx)
+
+// TASKS
 export interface Task {
   name: string;
   title: string;
@@ -254,99 +212,74 @@ export interface Task {
   modified: string;
 }
 
-interface CachedTasksData {
-  [leadId: string]: {
-    tasks: Task[];
-    timestamp: number;
-  };
-}
-
-const TASKS_CACHE_KEY = 'crm_tasks_cache';
-
-export const getCachedTasks = (leadId: string): Task[] | null => {
-  try {
-    const cached = localStorage.getItem(TASKS_CACHE_KEY);
-    if (!cached) return null;
-
-    const cachedData: CachedTasksData = JSON.parse(cached);
-    const taskCache = cachedData[leadId];
-    
-    if (!taskCache) return null;
-    
-    const isExpired = Date.now() - taskCache.timestamp > CACHE_DURATION;
-    if (isExpired) {
-      delete cachedData[leadId];
-      localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(cachedData));
-      return null;
-    }
-
-    return taskCache.tasks;
-  } catch (error) {
-    console.error('Error reading tasks cache:', error);
-    return null;
-  }
+export const getCachedTasks = async (leadId: string): Promise<Task[] | null> => {
+  return getFromStore<Task[]>(STORES.TASKS, leadId);
 };
 
-export const saveTasksToCache = (leadId: string, tasks: Task[]): void => {
+export const saveTasksToCache = async (leadId: string, tasks: Task[]): Promise<void> => {
+  return putToStore(STORES.TASKS, leadId, tasks);
+};
+
+export const clearTasksCache = async (): Promise<void> => {
+  return clearStore(STORES.TASKS);
+};
+
+export const clearTasksCacheForLead = async (leadId: string): Promise<void> => {
+  return deleteFromStore(STORES.TASKS, leadId);
+};
+
+// UTILS
+export const clearAllCache = async (): Promise<void> => {
+  await Promise.all([
+    clearStore(STORES.LEADS),
+    clearStore(STORES.LEAD_DETAILS),
+    clearStore(STORES.COMMENTS),
+    clearStore(STORES.TASKS)
+  ]);
+};
+
+export const clearLeadDetailsCache = async (): Promise<void> => {
+  return clearStore(STORES.LEAD_DETAILS);
+};
+
+export const getCacheInfo = async () => {
   try {
-    const cached = localStorage.getItem(TASKS_CACHE_KEY);
-    const cachedData: CachedTasksData = cached ? JSON.parse(cached) : {};
-    
-    cachedData[leadId] = {
-      tasks,
-      timestamp: Date.now()
+    const db = await openDB();
+    const stats: any = {
+      hasLeadsCache: false,
+      hasDetailsCache: false,
+      hasCommentsCache: false,
+      hasTasksCache: false,
+      leadsCount: 0,
+      detailsCount: 0,
+      commentsCount: 0,
+      tasksCount: 0,
     };
-    
-    localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(cachedData));
-  } catch (error) {
-    console.error('Error saving tasks to cache:', error);
-  }
-};
 
-export const clearTasksCache = (): void => {
-  localStorage.removeItem(TASKS_CACHE_KEY);
-};
+    // This is a rough estimate and doesn't return sync data like before
+    // We can iterate stores if really needed, but for now we'll return basics
+    const transaction = db.transaction(Object.values(STORES), 'readonly');
 
-export const clearTasksCacheForLead = (leadId: string): void => {
-  try {
-    const cached = localStorage.getItem(TASKS_CACHE_KEY);
-    if (!cached) return;
-
-    const cachedData: CachedTasksData = JSON.parse(cached);
-    delete cachedData[leadId];
-    localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(cachedData));
-  } catch (error) {
-    console.error('Error clearing tasks cache for lead:', error);
-  }
-};
-
-// Update getCacheInfo to include tasks cache info
-export const getCacheInfo = () => {
-  try {
-    const leadsCache = localStorage.getItem(LEADS_CACHE_KEY);
-    const detailsCache = localStorage.getItem(LEAD_DETAILS_CACHE_KEY);
-    const commentsCache = localStorage.getItem(COMMENTS_CACHE_KEY);
-    const tasksCache = localStorage.getItem(TASKS_CACHE_KEY);
-    
-    const leadsData = leadsCache ? JSON.parse(leadsCache) : null;
-    const detailsData = detailsCache ? JSON.parse(detailsCache) : null;
-    const commentsData = commentsCache ? JSON.parse(commentsCache) : null;
-    const tasksData = tasksCache ? JSON.parse(tasksCache) : null;
-    
-    return {
-      hasLeadsCache: !!leadsCache,
-      hasDetailsCache: !!detailsCache,
-      hasCommentsCache: !!commentsCache,
-      hasTasksCache: !!tasksCache,
-      leadsCount: leadsData ? leadsData.leads.length : 0,
-      detailsCount: detailsData ? Object.keys(detailsData).length : 0,
-      commentsCount: commentsData ? Object.keys(commentsData).length : 0,
-      tasksCount: tasksData ? Object.keys(tasksData).length : 0,
-      leadsTimestamp: leadsData ? leadsData.timestamp : null,
-      detailsTimestamp: detailsData ? Math.max(...Object.values(detailsData).map((d: any) => d.timestamp)) : null,
-      commentsTimestamp: commentsData ? Math.max(...Object.values(commentsData).map((c: any) => c.timestamp)) : null,
-      tasksTimestamp: tasksData ? Math.max(...Object.values(tasksData).map((t: any) => t.timestamp)) : null
+    const countStore = (storeName: string): Promise<number> => {
+      return new Promise((resolve) => {
+        const req = transaction.objectStore(storeName).count();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(0);
+      });
     };
+
+    stats.leadsCount = await countStore(STORES.LEADS);
+    stats.detailsCount = await countStore(STORES.LEAD_DETAILS);
+    stats.commentsCount = await countStore(STORES.COMMENTS);
+    stats.tasksCount = await countStore(STORES.TASKS);
+
+    stats.hasLeadsCache = stats.leadsCount > 0;
+    stats.hasDetailsCache = stats.detailsCount > 0;
+    stats.hasCommentsCache = stats.commentsCount > 0;
+    stats.hasTasksCache = stats.tasksCount > 0;
+
+    return stats;
+
   } catch {
     return {
       hasLeadsCache: false,
@@ -357,35 +290,11 @@ export const getCacheInfo = () => {
       detailsCount: 0,
       commentsCount: 0,
       tasksCount: 0,
-      leadsTimestamp: null,
-      detailsTimestamp: null,
-      commentsTimestamp: null,
-      tasksTimestamp: null
     };
   }
 };
 
-// utils/crmCache.ts
-export const updateCachedLeadDetails = (leadId: string, updatedLead: Lead) => {
-  if (typeof window === 'undefined') return;
-  
-  const key = `lead_${leadId}`;
-  const cachedData = {
-    data: updatedLead,
-    timestamp: new Date().getTime()
-  };
-  localStorage.setItem(key, JSON.stringify(cachedData));
-};
-
-// Add cache health check function
 export const initializeCacheHealthCheck = (): void => {
-  // Run cleanup every hour
-  setInterval(cleanupOldCacheEntries, 60 * 60 * 1000);
-  
-  // Also run cleanup when tab becomes visible
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-      cleanupOldCacheEntries();
-    }
-  });
+  // IndexedDB handles storage better, but we can still have a janitor process if needed
+  // For now, expiration is checked on read.
 };

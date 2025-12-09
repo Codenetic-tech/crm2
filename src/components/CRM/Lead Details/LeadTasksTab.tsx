@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { CheckSquare, Plus, RefreshCw, Clock4, User, MoreVertical, Flag, X } from 'lucide-react';
-import { 
-  getCachedTasks, 
-  saveTasksToCache, 
+import {
+  getCachedTasks,
+  saveTasksToCache,
   clearTasksCacheForLead,
-  type Task 
+  type Task
 } from '@/utils/crmCache';
 
 interface LeadTasksTabProps {
@@ -58,7 +58,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSubmit, loadin
             <X size={24} />
           </button>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -73,7 +73,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSubmit, loadin
               placeholder="Enter task title"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Description
@@ -86,7 +86,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSubmit, loadin
               placeholder="Enter task description"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Due Date & Time *
@@ -99,7 +99,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSubmit, loadin
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Priority
@@ -114,7 +114,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSubmit, loadin
               <option value="High">High</option>
             </select>
           </div>
-          
+
           <div className="flex gap-3 pt-4">
             <button
               type="button"
@@ -157,11 +157,11 @@ const LeadTasksTab: React.FC<LeadTasksTabProps> = ({ leadId, employeeId, email }
   // Function to fetch tasks with caching
   const fetchTasks = async () => {
     if (!leadId) return;
-    
+
     setTasksLoading(true);
     try {
       // Check cache first
-      const cachedTasks = getCachedTasks(leadId);
+      const cachedTasks = await getCachedTasks(leadId);
       if (cachedTasks) {
         console.log('Returning cached tasks');
         setTasks(cachedTasks);
@@ -190,10 +190,10 @@ const LeadTasksTab: React.FC<LeadTasksTabProps> = ({ leadId, employeeId, email }
       const tasksData: Task[] = await response.json();
       // Sort tasks by due date (soonest first)
       tasksData.sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
-      
+
       setTasks(tasksData);
       // Save to cache
-      saveTasksToCache(leadId, tasksData);
+      await saveTasksToCache(leadId, tasksData);
     } catch (error) {
       console.error('Error fetching tasks:', error);
     } finally {
@@ -204,7 +204,7 @@ const LeadTasksTab: React.FC<LeadTasksTabProps> = ({ leadId, employeeId, email }
   // Function to create a new task
   const createTask = async (taskData: any) => {
     if (!leadId) return;
-    
+
     setCreatingTask(true);
     try {
       // Format the due_date to "YYYY-MM-DD HH:MM:00"
@@ -237,7 +237,7 @@ const LeadTasksTab: React.FC<LeadTasksTabProps> = ({ leadId, employeeId, email }
 
       await response.json();
       setIsTaskModalOpen(false);
-      
+
       // Clear cache for this lead and refresh tasks
       clearTasksCacheForLead(leadId);
       fetchTasks();
@@ -271,7 +271,7 @@ const LeadTasksTab: React.FC<LeadTasksTabProps> = ({ leadId, employeeId, email }
       }
 
       await response.json();
-      
+
       // Clear cache for this lead and refresh tasks
       clearTasksCacheForLead(leadId);
       fetchTasks();
@@ -331,7 +331,7 @@ const LeadTasksTab: React.FC<LeadTasksTabProps> = ({ leadId, employeeId, email }
       <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-800">Tasks</h3>
-          <button 
+          <button
             onClick={() => setIsTaskModalOpen(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
           >
@@ -339,7 +339,7 @@ const LeadTasksTab: React.FC<LeadTasksTabProps> = ({ leadId, employeeId, email }
             New Task
           </button>
         </div>
-        
+
         {tasksLoading ? (
           <div className="flex items-center justify-center py-12">
             <RefreshCw className="animate-spin h-8 w-8 text-blue-500 mr-3" />
@@ -350,7 +350,7 @@ const LeadTasksTab: React.FC<LeadTasksTabProps> = ({ leadId, employeeId, email }
             <CheckSquare className="mx-auto h-16 w-16 text-gray-300 mb-4" />
             <h4 className="text-lg font-medium text-gray-900 mb-2">No tasks yet</h4>
             <p className="text-gray-500 mb-6">Get started by creating your first task</p>
-            <button 
+            <button
               onClick={() => setIsTaskModalOpen(true)}
               className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2 mx-auto"
             >
@@ -367,11 +367,10 @@ const LeadTasksTab: React.FC<LeadTasksTabProps> = ({ leadId, employeeId, email }
                     <button
                       onClick={() => updateTaskStatus(task.name, task.status === 'Done' ? 'Todo' : 'Done')}
                       disabled={updatingTask === task.name}
-                      className={`flex-shrink-0 w-5 h-5 rounded border-2 mt-1 transition-all ${
-                        task.status === 'Done' 
-                          ? 'bg-green-500 border-green-500 text-white' 
+                      className={`flex-shrink-0 w-5 h-5 rounded border-2 mt-1 transition-all ${task.status === 'Done'
+                          ? 'bg-green-500 border-green-500 text-white'
                           : 'border-gray-300 hover:border-green-500'
-                      } ${updatingTask === task.name ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        } ${updatingTask === task.name ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       {task.status === 'Done' && (
                         <CheckSquare size={14} className="w-full h-full" />
@@ -390,14 +389,14 @@ const LeadTasksTab: React.FC<LeadTasksTabProps> = ({ leadId, employeeId, email }
                           {task.status}
                         </span>
                       </div>
-                      
+
                       {task.description && (
-                        <p 
+                        <p
                           className={`text-sm text-gray-600 mb-3 ${task.status === 'Done' ? 'line-through' : ''}`}
                           dangerouslySetInnerHTML={{ __html: task.description }}
                         />
                       )}
-                      
+
                       <div className="flex items-center gap-4 text-sm text-gray-500">
                         <span className="flex items-center gap-1">
                           <Clock4 size={14} />

@@ -1,7 +1,7 @@
 // components/LeadDetailsPage.tsx
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
+import {
   Activity, CheckSquare, Mail, MessageCircle, FileText, MessageSquare,
   ChevronRight, Home, Building2, MailIcon, PhoneIcon,
   IndianRupee, ArrowUpRight, ArrowDownRight, Send, Paperclip,
@@ -79,7 +79,7 @@ const assignedUserFilterFn = (lead: Lead, filterValue: string) => {
   const assignData = lead._assign as string;
   try {
     const assignedUsers = JSON.parse(assignData || "[]") as string[];
-    return assignedUsers.some(user => 
+    return assignedUsers.some(user =>
       user.toLowerCase().includes(filterValue.toLowerCase())
     );
   } catch {
@@ -124,7 +124,7 @@ const LeadDetailsPage: React.FC = () => {
   const [newMessage, setNewMessage] = useState('');
   const [messages, setMessages] = useState(mockWhatsAppMessages);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
+
   // New states for comments
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -144,7 +144,7 @@ const LeadDetailsPage: React.FC = () => {
 
   const employeeId = user?.employeeId || '';
   const email = user?.email || '';
-  
+
   const tabs: Tab[] = [
     { id: 'form', label: 'Lead Details', icon: FileText },
     { id: 'activity', label: 'Activity', icon: Activity },
@@ -158,7 +158,7 @@ const LeadDetailsPage: React.FC = () => {
   const getDisplayName = (email: string) => {
     if (email === 'all') return 'All Users';
     const namePart = email.split('@')[0];
-    return namePart.split('.').map(part => 
+    return namePart.split('.').map(part =>
       part.charAt(0).toUpperCase() + part.slice(1)
     ).join(' ');
   };
@@ -174,7 +174,7 @@ const LeadDetailsPage: React.FC = () => {
       value: campaign,
       label: campaign
     }));
-    
+
     return [{ value: 'all', label: 'All Campaigns' }, ...campaigns];
   }, [allLeads]);
 
@@ -192,12 +192,12 @@ const LeadDetailsPage: React.FC = () => {
         // ignore parsing errors
       }
     });
-    
+
     const userOptions = Array.from(users).sort().map(user => ({
       value: user,
       label: getDisplayName(user)
     }));
-    
+
     return [{ value: 'all', label: 'All Users' }, ...userOptions];
   }, [allLeads]);
 
@@ -248,7 +248,7 @@ const LeadDetailsPage: React.FC = () => {
     try {
       const leads = await fetchLeads(employeeId, email, user.team);
       // Filter to only include relevant statuses like in the dashboard
-      const filteredLeads = leads.filter(lead => 
+      const filteredLeads = leads.filter(lead =>
         ['new', 'Contacted', 'qualified', 'followup', 'Not Interested', 'Call Back', 'Switch off', 'RNR'].includes(lead.status)
       );
       // Sort by creation date (newest first) like in dashboard
@@ -257,7 +257,7 @@ const LeadDetailsPage: React.FC = () => {
         const timeB = new Date(b.createdAt).getTime();
         return timeB - timeA;
       });
-      
+
       setAllLeads(sortedLeads);
     } catch (error) {
       console.error('Error fetching leads for navigation:', error);
@@ -436,11 +436,11 @@ const LeadDetailsPage: React.FC = () => {
   // Function to fetch comments
   const fetchComments = async () => {
     if (!leadId) return;
-    
+
     setCommentsLoading(true);
     try {
       // Check cache first
-      const cachedComments = getCachedComments(leadId);
+      const cachedComments = await getCachedComments(leadId);
       if (cachedComments) {
         setComments(cachedComments);
         setCommentsLoading(false);
@@ -466,17 +466,17 @@ const LeadDetailsPage: React.FC = () => {
       }
 
       const allComments: Comment[] = await response.json();
-      
+
       // Filter comments for this specific lead
-      const leadComments = allComments.filter(comment => 
+      const leadComments = allComments.filter(comment =>
         comment.reference_name === leadId
       );
-      
+
       // Sort by creation date (newest first)
       leadComments.sort((a, b) => new Date(b.creation).getTime() - new Date(a.creation).getTime());
-      
+
       setComments(leadComments);
-      saveCommentsToCache(leadId, leadComments);
+      await saveCommentsToCache(leadId, leadComments);
     } catch (error) {
       console.error('Error fetching comments:', error);
     } finally {
@@ -487,7 +487,7 @@ const LeadDetailsPage: React.FC = () => {
   // Function to post a new comment
   const postComment = async () => {
     if (!newComment.trim() || !leadId || postingComment) return;
-    
+
     setPostingComment(true);
     try {
       const response = await fetch('https://n8n.gopocket.in/webhook/hrms', {
@@ -509,12 +509,12 @@ const LeadDetailsPage: React.FC = () => {
       }
 
       const newCommentData: Comment[] = await response.json();
-      
+
       if (newCommentData && newCommentData.length > 0) {
         // Add the new comment to the list and clear the input
         const updatedComments = [newCommentData[0], ...comments];
         setComments(updatedComments);
-        saveCommentsToCache(leadId, updatedComments);
+        await saveCommentsToCache(leadId, updatedComments);
         setNewComment('');
       }
     } catch (error) {
@@ -531,7 +531,7 @@ const LeadDetailsPage: React.FC = () => {
       try {
         if (leadId) {
           // First, check if we have the lead in the cache
-          const cachedLead = getCachedLeadDetails(leadId);
+          const cachedLead = await getCachedLeadDetails(leadId);
           if (cachedLead) {
             setLead(cachedLead);
             setLoading(false);
@@ -578,17 +578,17 @@ const LeadDetailsPage: React.FC = () => {
 
   const handleSendMessage = () => {
     if (newMessage.trim() === '') return;
-    
+
     const newMsg = {
       id: messages.length + 1,
       text: newMessage,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       sent: true
     };
-    
+
     setMessages([...messages, newMsg]);
     setNewMessage('');
-    
+
     // Simulate reply after delay
     setTimeout(() => {
       const replyMsg = {
@@ -668,7 +668,7 @@ const LeadDetailsPage: React.FC = () => {
         <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
           <h2 className="text-xl font-bold text-gray-900 mb-2">Lead Not Found</h2>
           <p className="text-gray-600 mb-4">The requested lead could not be found.</p>
-          <button 
+          <button
             onClick={() => navigate('/crm')}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
@@ -687,8 +687,8 @@ const LeadDetailsPage: React.FC = () => {
 
           {/* LEFT — Breadcrumb */}
           <div className="flex items-center gap-2">
-            <button 
-              onClick={() => navigate('/crm')} 
+            <button
+              onClick={() => navigate('/crm')}
               className="flex items-center gap-1 hover:text-blue-600 transition-colors"
             >
               <Home size={16} />
@@ -697,7 +697,7 @@ const LeadDetailsPage: React.FC = () => {
 
             <ChevronRight size={16} />
 
-            <button 
+            <button
               onClick={() => navigate('/crm')}
               className="hover:text-blue-600 transition-colors"
             >
@@ -708,7 +708,7 @@ const LeadDetailsPage: React.FC = () => {
 
             <span className="text-gray-900 font-medium">{lead.id}</span>
             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(lead.status)}`}>
-                    {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+              {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
             </span>
           </div>
 
@@ -769,8 +769,8 @@ const LeadDetailsPage: React.FC = () => {
       </div>
 
 
-        {/* Header */}
-        {/*<div className="bg-white rounded-xl shadow-lg p-6 mb-6 border border-gray-100">
+      {/* Header */}
+      {/*<div className="bg-white rounded-xl shadow-lg p-6 mb-6 border border-gray-100">
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-4">
               <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-xl">
@@ -800,9 +800,9 @@ const LeadDetailsPage: React.FC = () => {
                 )}
               </div>
             </div>*/}
-            
-            {/* Navigation Buttons and Lead Info */}
-            {/*<div className="text-right">
+
+      {/* Navigation Buttons and Lead Info */}
+      {/*<div className="text-right">
               <div className="flex items-center justify-end gap-3 mb-4">
                 <button
                   onClick={goToPreviousLead}
@@ -840,315 +840,313 @@ const LeadDetailsPage: React.FC = () => {
           </div>
         </div> */}
 
-        {/* Tabs */}
-        <div className="bg-white rounded-xl shadow-lg shadow-blue-50 mb-6 border border-gray-100 overflow-x-auto">
-          <div className="flex">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-all whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+      {/* Tabs */}
+      <div className="bg-white rounded-xl shadow-lg shadow-blue-50 mb-6 border border-gray-100 overflow-x-auto">
+        <div className="flex">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-6 py-4 text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.id
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                   }`}
-                >
-                  <Icon size={18} />
-                  {tab.label}
-                </button>
-              );
-            })}
+              >
+                <Icon size={18} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      <div className="animate-fadeIn">
+        {/* Activity Tab */}
+        {activeTab === 'activity' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-800">Activity Timeline</h3>
+                <div className="flex items-center gap-2">
+                  <button className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg transition-colors">
+                    <Filter size={16} />
+                    Filter
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-4">
+                {mockActivities.map((activity) => (
+                  <div key={activity.id} className="flex gap-4 p-4 hover:bg-gray-50 rounded-lg transition-colors group">
+                    <div className="flex-shrink-0 w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center group-hover:bg-gray-200 transition-colors">
+                      {getActivityIcon(activity.type)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between">
+                        <p className="font-medium text-gray-900">{activity.action}</p>
+                        <span className="text-sm text-gray-500 whitespace-nowrap">{activity.date}</span>
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1">{activity.description}</p>
+                      <p className="text-sm text-gray-500 mt-2">by {activity.user}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Tab Content */}
-        <div className="animate-fadeIn">
-          {/* Activity Tab */}
-          {activeTab === 'activity' && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800">Activity Timeline</h3>
-                  <div className="flex items-center gap-2">
-                    <button className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg transition-colors">
-                      <Filter size={16} />
-                      Filter
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  {mockActivities.map((activity) => (
-                    <div key={activity.id} className="flex gap-4 p-4 hover:bg-gray-50 rounded-lg transition-colors group">
-                      <div className="flex-shrink-0 w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center group-hover:bg-gray-200 transition-colors">
-                        {getActivityIcon(activity.type)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between">
-                          <p className="font-medium text-gray-900">{activity.action}</p>
-                          <span className="text-sm text-gray-500 whitespace-nowrap">{activity.date}</span>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-1">{activity.description}</p>
-                        <p className="text-sm text-gray-500 mt-2">by {activity.user}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Comments Tab */}
-          {activeTab === 'comment' && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
-                {/* Comments Header */}
-                <div className="p-6 border-b border-gray-200">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-800">Comments & Notes</h3>
-                    <div className="text-sm text-gray-500">
-                      {comments.length} comment{comments.length !== 1 ? 's' : ''}
-                    </div>
-                  </div>
-                  
-                  {/* Add Comment Form */}
-                  <form onSubmit={handleCommentSubmit} className="space-y-4">
-                    <div>
-                      <label htmlFor="comment" className="block text-sm font-medium text-gray-700 mb-2">
-                        Add a Comment
-                      </label>
-                      <textarea
-                        id="comment"
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="Type your comment here..."
-                        rows={3}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                        disabled={postingComment}
-                      />
-                    </div>
-                    <div className="flex justify-end">
-                      <button
-                        type="submit"
-                        disabled={!newComment.trim() || postingComment}
-                        className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
-                      >
-                        {postingComment ? (
-                          <>
-                            <RefreshCw className="animate-spin h-4 w-4" />
-                            Posting...
-                          </>
-                        ) : (
-                          <>
-                            <MessageSquare size={16} />
-                            Post Comment
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-
-                {/* Comments List */}
-                <div className="divide-y divide-gray-100">
-                  {commentsLoading ? (
-                    <div className="p-8 text-center">
-                      <RefreshCw className="animate-spin h-8 w-8 text-blue-500 mx-auto mb-4" />
-                      <p className="text-gray-600">Loading comments...</p>
-                    </div>
-                  ) : comments.length === 0 ? (
-                    <div className="p-8 text-center">
-                      <MessageSquare className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-                      <p className="text-gray-500">No comments yet</p>
-                      <p className="text-gray-400 text-sm mt-1">Be the first to add a comment</p>
-                    </div>
-                  ) : (
-                    comments.map((comment) => (
-                      <div key={comment.name} className="p-6 hover:bg-gray-50 transition-colors">
-                        <div className="flex gap-4">
-                          <div className="flex-shrink-0">
-                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-sm">
-                              {comment.comment_by?.charAt(0) || comment.comment_email?.charAt(0) || 'U'}
-                            </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between mb-2">
-                              <div>
-                                <p className="font-medium text-gray-600">
-                                  {comment.comment_by} ({comment.comment_email}) commented
-                                </p>
-                              </div>
-                              <span className="text-sm text-gray-400 whitespace-nowrap">
-                                {formatCommentDate(comment.creation)}
-                              </span>
-                            </div>
-                            
-                            <p className="font-semibold text-black-700 whitespace-pre-wrap">{comment.content}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Tasks Tab - Now using the separated component */}
-          {activeTab === 'task' && (
-            <LeadTasksTab 
-              leadId={leadId || ''}
-              employeeId={employeeId}
-              email={email}
-            />
-          )}
-
-          {/* Form Tab - Now using the separated component */}
-          {activeTab === 'form' && lead && (
-            <LeadFormTab 
-              lead={lead}
-              leadId={leadId || ''}
-              employeeId={employeeId}
-              email={email}
-              onLeadUpdate={handleLeadUpdate}
-            />
-          )}
-
-          {/* Email Tab */}
-          {activeTab === 'email' && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
-                <div className="p-6 border-b border-gray-200">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-800">Email Communication</h3>
-                    <button className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2">
-                      <Mail size={16} />
-                      Compose Email
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1 relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                      <input
-                        type="text"
-                        placeholder="Search emails..."
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <button className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg transition-colors">
-                      <Filter size={16} />
-                      Filter
-                    </button>
-                  </div>
-                </div>
-                <div className="divide-y divide-gray-200">
-                  {mockEmails.map((email) => (
-                    <div key={email.id} className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${!email.read ? 'bg-blue-50' : ''}`}>
-                      <div className="flex items-start gap-4">
-                        <div className={`w-3 h-3 rounded-full mt-2 ${email.read ? 'bg-gray-300' : 'bg-blue-500'}`}></div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-medium text-gray-900">
-                              {email.type === 'sent' ? `To: ${lead.email}` : `From: ${lead.email}`}
-                            </span>
-                            <span className="text-sm text-gray-500">{email.date}</span>
-                          </div>
-                          <p className="font-semibold text-gray-900 mb-1">{email.subject}</p>
-                          <p className="text-sm text-gray-600 truncate">{email.preview}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* WhatsApp Tab */}
-          {activeTab === 'whatsapp' && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
-                {/* Chat Header */}
-                <div className="bg-green-500 text-white p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-semibold">
-                        {lead.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div>
-                        <p className="font-semibold">{lead.name}</p>
-                        <p className="text-green-100 text-sm">Online</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button className="text-green-100 hover:text-white transition-colors">
-                        <Phone size={20} />
-                      </button>
-                      <button className="text-green-100 hover:text-white transition-colors">
-                        <Video size={20} />
-                      </button>
-                      <button className="text-green-100 hover:text-white transition-colors">
-                        <MoreVertical size={20} />
-                      </button>
-                    </div>
+        {/* Comments Tab */}
+        {activeTab === 'comment' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+              {/* Comments Header */}
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800">Comments & Notes</h3>
+                  <div className="text-sm text-gray-500">
+                    {comments.length} comment{comments.length !== 1 ? 's' : ''}
                   </div>
                 </div>
 
-                {/* Chat Messages */}
-                <div className="h-96 overflow-y-auto bg-green-50 p-4 space-y-3">
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex ${message.sent ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div
-                        className={`max-w-xs lg:max-w-md rounded-2xl px-4 py-2 ${
-                          message.sent
-                            ? 'bg-green-100 text-gray-800 rounded-br-none'
-                            : 'bg-white text-gray-800 rounded-bl-none shadow-sm'
-                        }`}
-                      >
-                        <p className="text-sm">{message.text}</p>
-                        <p className="text-xs text-gray-500 text-right mt-1">{message.time}</p>
-                      </div>
-                    </div>
-                  ))}
-                  <div ref={messagesEndRef} />
-                </div>
-
-                {/* Message Input */}
-                <div className="bg-gray-100 p-4 border-t border-gray-200">
-                  <div className="flex items-center gap-2">
-                    <button className="text-gray-500 hover:text-gray-700 transition-colors p-2">
-                      <Paperclip size={20} />
-                    </button>
-                    <button className="text-gray-500 hover:text-gray-700 transition-colors p-2">
-                      <Smile size={20} />
-                    </button>
-                    <div className="flex-1 relative">
-                      <input
-                        type="text"
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        placeholder="Type a message..."
-                        className="w-full px-4 py-3 rounded-full border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      />
-                    </div>
+                {/* Add Comment Form */}
+                <form onSubmit={handleCommentSubmit} className="space-y-4">
+                  <div>
+                    <label htmlFor="comment" className="block text-sm font-medium text-gray-700 mb-2">
+                      Add a Comment
+                    </label>
+                    <textarea
+                      id="comment"
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Type your comment here..."
+                      rows={3}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      disabled={postingComment}
+                    />
+                  </div>
+                  <div className="flex justify-end">
                     <button
-                      onClick={handleSendMessage}
-                      disabled={!newMessage.trim()}
-                      className="bg-green-500 text-white p-3 rounded-full hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                      type="submit"
+                      disabled={!newComment.trim() || postingComment}
+                      className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
                     >
-                      <Send size={20} />
+                      {postingComment ? (
+                        <>
+                          <RefreshCw className="animate-spin h-4 w-4" />
+                          Posting...
+                        </>
+                      ) : (
+                        <>
+                          <MessageSquare size={16} />
+                          Post Comment
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Comments List */}
+              <div className="divide-y divide-gray-100">
+                {commentsLoading ? (
+                  <div className="p-8 text-center">
+                    <RefreshCw className="animate-spin h-8 w-8 text-blue-500 mx-auto mb-4" />
+                    <p className="text-gray-600">Loading comments...</p>
+                  </div>
+                ) : comments.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <MessageSquare className="mx-auto h-12 w-12 text-gray-300 mb-4" />
+                    <p className="text-gray-500">No comments yet</p>
+                    <p className="text-gray-400 text-sm mt-1">Be the first to add a comment</p>
+                  </div>
+                ) : (
+                  comments.map((comment) => (
+                    <div key={comment.name} className="p-6 hover:bg-gray-50 transition-colors">
+                      <div className="flex gap-4">
+                        <div className="flex-shrink-0">
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-sm">
+                            {comment.comment_by?.charAt(0) || comment.comment_email?.charAt(0) || 'U'}
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <p className="font-medium text-gray-600">
+                                {comment.comment_by} ({comment.comment_email}) commented
+                              </p>
+                            </div>
+                            <span className="text-sm text-gray-400 whitespace-nowrap">
+                              {formatCommentDate(comment.creation)}
+                            </span>
+                          </div>
+
+                          <p className="font-semibold text-black-700 whitespace-pre-wrap">{comment.content}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tasks Tab - Now using the separated component */}
+        {activeTab === 'task' && (
+          <LeadTasksTab
+            leadId={leadId || ''}
+            employeeId={employeeId}
+            email={email}
+          />
+        )}
+
+        {/* Form Tab - Now using the separated component */}
+        {activeTab === 'form' && lead && (
+          <LeadFormTab
+            lead={lead}
+            leadId={leadId || ''}
+            employeeId={employeeId}
+            email={email}
+            onLeadUpdate={handleLeadUpdate}
+          />
+        )}
+
+        {/* Email Tab */}
+        {activeTab === 'email' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800">Email Communication</h3>
+                  <button className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2">
+                    <Mail size={16} />
+                    Compose Email
+                  </button>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                    <input
+                      type="text"
+                      placeholder="Search emails..."
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <button className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg transition-colors">
+                    <Filter size={16} />
+                    Filter
+                  </button>
+                </div>
+              </div>
+              <div className="divide-y divide-gray-200">
+                {mockEmails.map((email) => (
+                  <div key={email.id} className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${!email.read ? 'bg-blue-50' : ''}`}>
+                    <div className="flex items-start gap-4">
+                      <div className={`w-3 h-3 rounded-full mt-2 ${email.read ? 'bg-gray-300' : 'bg-blue-500'}`}></div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-gray-900">
+                            {email.type === 'sent' ? `To: ${lead.email}` : `From: ${lead.email}`}
+                          </span>
+                          <span className="text-sm text-gray-500">{email.date}</span>
+                        </div>
+                        <p className="font-semibold text-gray-900 mb-1">{email.subject}</p>
+                        <p className="text-sm text-gray-600 truncate">{email.preview}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* WhatsApp Tab */}
+        {activeTab === 'whatsapp' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+              {/* Chat Header */}
+              <div className="bg-green-500 text-white p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-semibold">
+                      {lead.name.split(' ').map(n => n[0]).join('')}
+                    </div>
+                    <div>
+                      <p className="font-semibold">{lead.name}</p>
+                      <p className="text-green-100 text-sm">Online</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button className="text-green-100 hover:text-white transition-colors">
+                      <Phone size={20} />
+                    </button>
+                    <button className="text-green-100 hover:text-white transition-colors">
+                      <Video size={20} />
+                    </button>
+                    <button className="text-green-100 hover:text-white transition-colors">
+                      <MoreVertical size={20} />
                     </button>
                   </div>
                 </div>
               </div>
+
+              {/* Chat Messages */}
+              <div className="h-96 overflow-y-auto bg-green-50 p-4 space-y-3">
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex ${message.sent ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-xs lg:max-w-md rounded-2xl px-4 py-2 ${message.sent
+                        ? 'bg-green-100 text-gray-800 rounded-br-none'
+                        : 'bg-white text-gray-800 rounded-bl-none shadow-sm'
+                        }`}
+                    >
+                      <p className="text-sm">{message.text}</p>
+                      <p className="text-xs text-gray-500 text-right mt-1">{message.time}</p>
+                    </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Message Input */}
+              <div className="bg-gray-100 p-4 border-t border-gray-200">
+                <div className="flex items-center gap-2">
+                  <button className="text-gray-500 hover:text-gray-700 transition-colors p-2">
+                    <Paperclip size={20} />
+                  </button>
+                  <button className="text-gray-500 hover:text-gray-700 transition-colors p-2">
+                    <Smile size={20} />
+                  </button>
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder="Type a message..."
+                      className="w-full px-4 py-3 rounded-full border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    />
+                  </div>
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={!newMessage.trim()}
+                    className="bg-green-500 text-white p-3 rounded-full hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Send size={20} />
+                  </button>
+                </div>
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
 
     </div>
   );

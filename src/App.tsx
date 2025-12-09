@@ -142,7 +142,7 @@ const AppContent = () => {
           path="/claims"
           element={
             <ProtectedRoute>
-              <PettyCashManagement />
+              <PettyCashManagement currentUserEmail={''} />
             </ProtectedRoute>
           }
         />
@@ -193,13 +193,17 @@ const AppContent = () => {
   );
 };
 
+import { LeadProvider } from '@/contexts/LeadContext';
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AuthProvider>
-        <Toaster />
-        <Sonner />
-        <AppContent />
+        <LeadProvider>
+          <Toaster />
+          <Sonner />
+          <AppContent />
+        </LeadProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

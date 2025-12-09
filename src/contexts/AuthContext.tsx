@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, Company, Employee } from '../utils';
+import { clearAllCache } from '@/utils/crmCache';
 
 interface AuthContextType {
   user: User | null;
@@ -44,7 +45,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const savedEmployee = localStorage.getItem('hrms_employee');
       const savedCompany = localStorage.getItem('hrms_company');
       const savedToken = localStorage.getItem('hrms_token');
-      
+
       // Check if we have the essential data
       if (!savedUser || !savedEmployee) {
         return false;
@@ -57,7 +58,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Basic validation - check if required fields exist
       const hasValidUser = !!(userData && userData.id);
       const hasValidEmployee = !!(employeeData && employeeData.employeeId);
-      
+
       return hasValidUser && hasValidEmployee;
     } catch (error) {
       console.error('Error checking stored auth:', error);
@@ -103,7 +104,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsAuthenticated(false);
     setToken(null);
     setPath(null);
-    
+
     // Clear all auth-related localStorage items
     localStorage.removeItem('hrms_user');
     localStorage.removeItem('hrms_employee');
@@ -120,7 +121,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Make login request to n8n webhook
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
       const apiUrl = `${API_BASE_URL}/api/method/crm.api.lead.login`;
-      
+
       const loginResponse = await fetch(apiUrl, {
         method: 'POST',
         headers: {
@@ -252,18 +253,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsAuthenticated(true);
       setToken(loginData.token || null);
       setPath(loginData.path || null);
-      
+
       // Save to localStorage - this is critical for persistence
       localStorage.setItem('hrms_user', JSON.stringify(userData));
       localStorage.setItem('hrms_employee', JSON.stringify(employeeData));
       localStorage.setItem('hrms_company', JSON.stringify(companyData));
       localStorage.setItem('hrms_token', loginData.token || '');
       localStorage.setItem('hrms_path', loginData.path || '');
-      
+
     } catch (error) {
       console.error('Login error:', error);
       clearAuthData();
-      
+
       if (error instanceof Error) {
         throw error;
       } else if (typeof error === 'string') {
@@ -276,9 +277,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const logout = () => {   
+
+
+  const logout = () => {
     // Immediately clear local data
     clearAuthData();
+    // Clear IndexedDB cache
+    clearAllCache().catch(console.error);
   };
 
   const switchRole = (role: string) => {

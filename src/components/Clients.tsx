@@ -14,12 +14,14 @@ import {
 } from "@/components/ui/tooltip"
 import { Tooltip } from '@radix-ui/react-tooltip';
 
-// Import the actual useAuth hook and fetchLeads function
+// Import the actual useAuth hook
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchLeads, refreshLeads, type Lead, clearAllCache } from '@/utils/crm';
+import { useLeads } from '@/contexts/LeadContext';
+import { type Lead, clearAllCache } from '@/utils/crm';
 import { SummaryCard } from './SummaryCard';
 import { AddLeadDialog } from './AddLeadDialog';
 import CommentModal from '@/components/CRM/CommentModal';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Import shadcn table components
 import {
@@ -129,54 +131,103 @@ const assignedUserFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string
 };
 
 const Clients: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
+  const { leads, isLoading: isLeadsLoading, isRefreshing: isLeadsRefreshing, refreshLeads, updateLead } = useLeads();
+  const navigate = useNavigate();
 
-  const [leads, setLeads] = useState<Lead[]>([]);
+  // Map context state to local names
+  const isInitialLoading = isLeadsLoading;
+  const isManualRefreshing = isLeadsRefreshing;
 
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
-  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState(900); // 15 minutes in seconds
+  // Local UI State
   const [error, setError] = useState<string | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'syncing'>('connected');
-  const [newRecordsCount, setNewRecordsCount] = useState(0);
-  const [modifiedRecordsCount, setModifiedRecordsCount] = useState(0);
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [isChangingStatus, setIsChangingStatus] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isChangingStatus, setIsChangingStatus] = useState<string | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [selectedLeadForComment, setSelectedLeadForComment] = useState<Lead | null>(null);
+  const [newComment, setNewComment] = useState('');
+  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
+  const [isPostingComment, setIsPostingComment] = useState(false);
 
-  // Filter states
-  const [selectedCampaign, setSelectedCampaign] = useState<string>('');
-  const [selectedSource, setSelectedSource] = useState<string>('');
-  const [selectedAssignedUser, setSelectedAssignedUser] = useState<string>('');
+  // Refresh interval state
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [refreshInterval, setRefreshInterval] = useState(120000); // 2 minutes default
 
-  // Rate limiting state
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+
+  // Missing states for filters and refresh
+  const [globalFilter, setGlobalFilter] = useState('');
+  const [selectedCampaign, setSelectedCampaign] = useState('all');
+  const [selectedSource, setSelectedSource] = useState('all');
+  const [selectedAssignedUser, setSelectedAssignedUser] = useState('all');
   const [lastRefreshTime, setLastRefreshTime] = useState<number | null>(null);
-  const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const cooldownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [canRefresh, setCanRefresh] = useState(true);
 
-  // Mobile specific states
+  // Helper functions for cooldown
+  const formatCooldownTime = (ms: number) => {
+    const seconds = Math.ceil(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const getCooldownRemaining = () => {
+    if (!lastRefreshTime) return 0;
+    const timeSinceLastRefresh = Date.now() - lastRefreshTime;
+    return Math.max(0, REFRESH_COOLDOWN_MS - timeSinceLastRefresh);
+  };
+
+
+  // Mobile menu states
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [mobileColumnVisibilityOpen, setMobileColumnVisibilityOpen] = useState(false);
 
-  // Refs
-  const lastFetchedData = useRef<Lead[]>([]);
-  const autoRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const cooldownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const handleRateLimitedRefresh = async () => {
+    if (!canRefresh) return;
 
-  // Comment state
-  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
-  const [selectedLeadForComment, setSelectedLeadForComment] = useState<Lead | null>(null);
-  const [newComment, setNewComment] = useState('');
-  const [isPostingComment, setIsPostingComment] = useState(false);
+    setCanRefresh(false);
+    setCooldownRemaining(REFRESH_COOLDOWN_MS / 1000);
 
-  // TanStack Table state
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'createdAt', desc: true }]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [globalFilter, setGlobalFilter] = useState('');
+    try {
+      await handleClearCacheAndRefresh();
+    } finally {
+      // Start cooldown timer
+      if (cooldownIntervalRef.current) clearInterval(cooldownIntervalRef.current);
 
+      cooldownIntervalRef.current = setInterval(() => {
+        setCooldownRemaining(prev => {
+          if (prev <= 1) {
+            if (cooldownIntervalRef.current) clearInterval(cooldownIntervalRef.current);
+            setCanRefresh(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+  };
+
+  // Auto-refresh effect
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+
+    if (autoRefresh && refreshInterval > 0) {
+      intervalId = setInterval(() => {
+        if (canRefresh && !isLeadsRefreshing) {
+          handleRateLimitedRefresh();
+        }
+      }, refreshInterval);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [autoRefresh, refreshInterval, canRefresh, isLeadsRefreshing]);
+
+  // Column Visibility State with Local Storage
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -189,10 +240,11 @@ const Clients: React.FC = () => {
       }
     }
     return {
-      other_brokers: false
+      other_brokers: false // Default if nothing in localStorage
     };
   });
 
+  // Persist column visibility
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -202,6 +254,14 @@ const Clients: React.FC = () => {
       }
     }
   }, [columnVisibility]);
+
+  const handleClearCacheAndRefresh = async () => {
+    try {
+      await refreshLeads();
+    } catch (err) {
+      console.error("Failed to refresh leads:", err);
+    }
+  };
 
   const [rowSelection, setRowSelection] = useState({});
 
@@ -754,30 +814,6 @@ const Clients: React.FC = () => {
                     <MessageCircle size={14} className="text-blue-500" />
                     <span className="font-normal">Add Comment</span>
                   </button>
-
-                  <div className="px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-100">
-                    Change Status
-                  </div>
-                  {statusOptions.map((status) => (
-                    <button
-                      key={status.value}
-                      className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between hover:bg-gray-50 ${lead.status === status.value ? 'bg-blue-50' : ''
-                        }`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        changeLeadStatus(lead.id, status.value, lead.name);
-                        setOpenDropdown(null);
-                      }}
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <div className={`w-2 h-2 rounded-full ${status.color.split(' ')[0]} flex-shrink-0`} />
-                        <span className="font-normal truncate">{status.label}</span>
-                      </div>
-                      {lead.status === status.value && (
-                        <Check size={16} className="text-blue-600 flex-shrink-0 ml-2" />
-                      )}
-                    </button>
-                  ))}
                 </div>
               )}
             </div>
@@ -843,67 +879,7 @@ const Clients: React.FC = () => {
     }
   }, [selectedAssignedUser, table]);
 
-  // Rate limiting functions
-  const canRefresh = useMemo(() => {
-    if (!lastRefreshTime) return true;
-    const timeSinceLastRefresh = Date.now() - lastRefreshTime;
-    const canRefreshNow = timeSinceLastRefresh >= REFRESH_COOLDOWN_MS;
 
-    if (canRefreshNow && cooldownIntervalRef.current) {
-      clearInterval(cooldownIntervalRef.current);
-      cooldownIntervalRef.current = null;
-      setCooldownRemaining(0);
-    }
-
-    return canRefreshNow;
-  }, [lastRefreshTime, cooldownRemaining]);
-
-  const getCooldownRemaining = () => {
-    if (!lastRefreshTime) return 0;
-    const timeSinceLastRefresh = Date.now() - lastRefreshTime;
-    return Math.max(0, REFRESH_COOLDOWN_MS - timeSinceLastRefresh);
-  };
-
-  const formatCooldownTime = (ms: number) => {
-    const seconds = Math.ceil(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
-
-  useEffect(() => {
-    if (cooldownIntervalRef.current) {
-      clearInterval(cooldownIntervalRef.current);
-      cooldownIntervalRef.current = null;
-    }
-
-    if (lastRefreshTime && !canRefresh) {
-      const initialRemaining = getCooldownRemaining();
-      setCooldownRemaining(initialRemaining);
-
-      cooldownIntervalRef.current = setInterval(() => {
-        const remaining = getCooldownRemaining();
-        setCooldownRemaining(remaining);
-
-        if (remaining <= 0) {
-          if (cooldownIntervalRef.current) {
-            clearInterval(cooldownIntervalRef.current);
-            cooldownIntervalRef.current = null;
-          }
-          setCooldownRemaining(0);
-        }
-      }, 1000);
-    } else {
-      setCooldownRemaining(0);
-    }
-
-    return () => {
-      if (cooldownIntervalRef.current) {
-        clearInterval(cooldownIntervalRef.current);
-        cooldownIntervalRef.current = null;
-      }
-    };
-  }, [lastRefreshTime, canRefresh]);
 
   const changeLeadStatus = async (leadId: string, newStatus: string, leadName: string) => {
     setIsChangingStatus(leadId);
@@ -930,186 +906,23 @@ const Clients: React.FC = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      setLeads(prevLeads =>
-        prevLeads.map(lead =>
-          lead.id === leadId
-            ? { ...lead, status: newStatus as Lead['status'] }
-            : lead
-        )
-      );
+      const leadToUpdate = leads.find(l => l.id === leadId);
+      if (leadToUpdate) {
+        updateLead({ ...leadToUpdate, status: newStatus as Lead['status'] });
+      }
 
     } catch (error: any) {
       console.error('Error changing lead status:', error);
       setError(`Failed to change status: ${error.message}`);
     } finally {
       setIsChangingStatus(null);
+      setOpenDropdown(null);
       handleClearCacheAndRefresh();
     }
   };
 
-  const fetchAllLeads = async (isAutoRefresh = false, isManualRefresh = false) => {
-    try {
-      if (isAutoRefresh) {
-        setIsAutoRefreshing(true);
-        setConnectionStatus('syncing');
-      } else if (isManualRefresh) {
-        setIsManualRefreshing(true);
-        setConnectionStatus('syncing');
-      } else {
-        setIsInitialLoading(true);
-      }
-
-      setError(null);
-
-      const apiLeads = await fetchLeads(employeeId, email, user.team);
-
-      if (isAutoRefresh && lastFetchedData.current.length > 0) {
-        const currentDataMap = new Map(lastFetchedData.current.map(lead => [lead.id, getLeadContentHash(lead)]));
-        const newDataMap = new Map(apiLeads.map(lead => [lead.id, getLeadContentHash(lead)]));
-
-        let newCount = 0;
-        let modifiedCount = 0;
-
-        const cleanCurrentData = lastFetchedData.current.map(lead => ({
-          ...lead,
-          _isNew: false,
-          _isModified: false
-        }));
-
-        const currentDataById = new Map(cleanCurrentData.map(lead => [lead.id, lead]));
-
-        const updatedLeads: Lead[] = [];
-
-        apiLeads.forEach(newLead => {
-          const leadId = newLead.id;
-          const newContentHash = newDataMap.get(leadId);
-          const oldContentHash = currentDataMap.get(leadId);
-          const existingLead = currentDataById.get(leadId);
-
-          if (!existingLead) {
-            newLead._isNew = true;
-            updatedLeads.push(newLead);
-            newCount++;
-          } else if (oldContentHash !== newContentHash) {
-            newLead._isModified = true;
-            updatedLeads.push(newLead);
-            modifiedCount++;
-          } else {
-            updatedLeads.push(existingLead);
-          }
-        });
-
-        updatedLeads.sort((a, b) => {
-          const timeA = new Date(a.createdAt).getTime();
-          const timeB = new Date(b.createdAt).getTime();
-          return timeB - timeA;
-        });
-
-        setLeads(updatedLeads);
-        lastFetchedData.current = updatedLeads.map(lead => ({
-          ...lead,
-          _isNew: false,
-          _isModified: false
-        }));
-
-        setNewRecordsCount(newCount);
-        setModifiedRecordsCount(modifiedCount);
-
-        setTimeout(() => {
-          setLeads(prev => prev.map(lead => ({
-            ...lead,
-            _isNew: false,
-            _isModified: false
-          })));
-        }, 5000);
-
-        setConnectionStatus('connected');
-      } else {
-        const sortedLeads = apiLeads.sort((a, b) => {
-          const timeA = new Date(a.createdAt).getTime();
-          const timeB = new Date(b.createdAt).getTime();
-          return timeB - timeA;
-        });
-
-        setLeads(sortedLeads);
-        lastFetchedData.current = sortedLeads;
-        setNewRecordsCount(0);
-        setModifiedRecordsCount(0);
-        setConnectionStatus('connected');
-      }
-
-      setLastUpdated(new Date());
-    } catch (error: any) {
-      console.error('Error fetching leads:', error);
-      if (error.message.includes('Failed to fetch') || error.message.includes('JSON')) {
-        setError('Unable to load leads. Please check your connection and try again.');
-      } else {
-        setError(`Failed to fetch leads: ${error.message}`);
-      }
-      setConnectionStatus('disconnected');
-    } finally {
-      setIsInitialLoading(false);
-      setIsAutoRefreshing(false);
-      setIsManualRefreshing(false);
-    }
-  };
-
-  const getLeadContentHash = (lead: Lead): string => {
-    const keys: (keyof Lead)[] = ['name', 'email', 'phone', 'company', 'status', 'value', 'assignedTo', 'lastActivity'];
-    return keys.map(key => String(lead[key] || '')).join('|');
-  };
-
-  const handleRateLimitedRefresh = async () => {
-    if (!canRefresh) {
-      setError(`Please wait ${formatCooldownTime(cooldownRemaining)} before refreshing again`);
-      return;
-    }
-
-    setLastRefreshTime(Date.now());
-    await handleClearCacheAndRefresh();
-  };
-
-  const handleClearCacheAndRefresh = async () => {
-    if (!employeeId || !email) return;
-
-    clearAllCache();
-    await refreshLeads(employeeId, email, user.team);
-    await fetchAllLeads(false, true);
-  };
-
-  useEffect(() => {
-    if (employeeId && email) {
-      fetchAllLeads(false);
-    }
-  }, [employeeId, email]);
-
-  useEffect(() => {
-    if (autoRefreshTimeoutRef.current) {
-      clearTimeout(autoRefreshTimeoutRef.current);
-    }
-
-    if (autoRefresh && !isInitialLoading && employeeId && email) {
-      const scheduleNextRefresh = () => {
-        autoRefreshTimeoutRef.current = setTimeout(() => {
-          handleClearCacheAndRefresh().finally(() => {
-            scheduleNextRefresh();
-          });
-        }, refreshInterval * 1000);
-      };
-
-      scheduleNextRefresh();
-    }
-
-    return () => {
-      if (autoRefreshTimeoutRef.current) {
-        clearTimeout(autoRefreshTimeoutRef.current);
-      }
-    };
-  }, [autoRefresh, refreshInterval, isInitialLoading, employeeId, email]);
-
-  // Calculate summary data for Clients view
   const summaryData = useMemo(() => {
-    if (isInitialLoading && leads.length === 0) {
+    if (isInitialLoading) {
       return {
         totalLeads: 0,
         newLeads: 0,
@@ -1120,7 +933,6 @@ const Clients: React.FC = () => {
         totalValue: 0,
         conversionRate: 0,
         firstTradedClients: 0,
-        // Add missing fields for MobileHeader compatibility
         notinterested: 0,
         existingclient: 0,
         rnr: 0,
@@ -1129,35 +941,31 @@ const Clients: React.FC = () => {
         won: 0,
       };
     }
+    // Get filtered leads from table
+    const currentLeads = table.getFilteredRowModel().rows.map(row => row.original);
 
+    // Calculate summary from filtered leads
     return {
-      totalLeads: leads.length,
-      newLeads: leads.filter(lead => lead.status === 'new').length,
-      contactedLeads: leads.filter(lead => lead.status === 'Contacted').length,
-      followup: leads.filter(lead => lead.status === 'followup').length,
-      wonleads: leads.filter(lead => lead.status === 'won').length,
-      qualifiedLeads: leads.filter(lead => lead.status === 'qualified').length,
-      totalValue: leads.reduce((sum, lead) => sum + lead.value, 0),
-      firstTradedClients: leads.filter(lead => lead.tradeDone === "TRUE").length,
-      conversionRate: Math.round((leads.filter(lead => ['qualified', 'negotiation', 'won'].includes(lead.status)).length / Math.max(leads.length, 1)) * 100),
-      // Add missing fields for MobileHeader compatibility
-      notinterested: leads.filter(lead => lead.status === 'Not Interested').length,
-      existingclient: leads.filter(lead => lead.status === 'won').length, // Assuming won is existing client
-      rnr: leads.filter(lead => lead.status === 'RNR').length,
-      switchoff: leads.filter(lead => lead.status === 'Switch off').length,
-      callback: leads.filter(lead => lead.status === 'Call Back').length,
-      won: leads.filter(lead => lead.status === 'won').length,
+      totalLeads: currentLeads.length,
+      newLeads: currentLeads.filter(lead => lead.status === 'new').length,
+      contactedLeads: currentLeads.filter(lead => lead.status === 'Contacted').length,
+      followup: currentLeads.filter(lead => lead.status === 'followup').length,
+      wonleads: currentLeads.filter(lead => lead.status === 'won').length,
+      qualifiedLeads: currentLeads.filter(lead => lead.status === 'qualified').length,
+      totalValue: currentLeads.reduce((sum, lead) => sum + lead.value, 0),
+      firstTradedClients: currentLeads.filter(lead => lead.tradeDone === "TRUE").length,
+      conversionRate: Math.round((currentLeads.filter(lead => ['qualified', 'negotiation', 'won'].includes(lead.status)).length / Math.max(currentLeads.length, 1)) * 100),
+      notinterested: currentLeads.filter(lead => lead.status === 'Not Interested').length,
+      existingclient: currentLeads.filter(lead => lead.status === 'won').length,
+      rnr: currentLeads.filter(lead => lead.status === 'RNR').length,
+      switchoff: currentLeads.filter(lead => lead.status === 'Switch off').length,
+      callback: currentLeads.filter(lead => lead.status === 'Call Back').length,
+      won: currentLeads.filter(lead => lead.status === 'won').length,
     };
-  }, [leads, isInitialLoading]);
+  }, [leads, isInitialLoading, columnFilters, globalFilter, table]);
 
-  const handleLeadClick = (leadId: string) => {
-    if (table.getFilteredSelectedRowModel().rows.length === 0) {
-      navigate(`/crm/leads/${leadId}`);
-    }
-  };
-
-  const handleLeadAdded = () => {
-    handleClearCacheAndRefresh();
+  const handleLeadAdded = async () => {
+    await handleClearCacheAndRefresh();
   };
 
   const toggleDropdown = (leadId: string, e: React.MouseEvent) => {
@@ -1165,8 +973,14 @@ const Clients: React.FC = () => {
     setOpenDropdown(openDropdown === leadId ? null : leadId);
   };
 
+  const handleLeadClick = (leadId: string) => {
+    if (table.getFilteredSelectedRowModel().rows.length === 0) {
+      navigate(`/crm/leads/${leadId}`);
+    }
+  };
+
   const RefreshButton = () => {
-    const isRefreshing = isManualRefreshing || isAutoRefreshing;
+    const isRefreshing = isManualRefreshing;
     const isDisabled = !canRefresh || isRefreshing || isInitialLoading;
 
     let buttonContent;
@@ -1222,6 +1036,21 @@ const Clients: React.FC = () => {
     };
   }, []);
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+
+    if (hour < 12) return "Good Morning";
+    if (hour < 18) return "Good Afternoon";
+    return "Good Evening";
+  };
+
+  const formatName = (name = "") => {
+    return name
+      .split('.')
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join('.');
+  };
+
   return (
     <div className="lg:pl-6">
       {/* Comment Modal */}
@@ -1243,21 +1072,11 @@ const Clients: React.FC = () => {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-2">
             <h1 className="text-lg sm:text-2xl font-bold text-foreground">
-              Client Stage
+              <span className="text-violet-700">{getGreeting()}</span> {formatName(user?.firstName)}
             </h1>
           </div>
 
-          {lastUpdated && (
-            <div className="flex items-center gap-4 text-xs sm:text-sm">
-              {(newRecordsCount > 0 || modifiedRecordsCount > 0) && (
-                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
-                  {newRecordsCount > 0 && `${newRecordsCount} new`}
-                  {newRecordsCount > 0 && modifiedRecordsCount > 0 && ', '}
-                  {modifiedRecordsCount > 0 && `${modifiedRecordsCount} updated`}
-                </span>
-              )}
-            </div>
-          )}
+
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
           {/* Auto Refresh Toggle */}
@@ -1272,18 +1091,26 @@ const Clients: React.FC = () => {
             <label htmlFor="autoRefresh" className="text-sm text-gray-700">Auto Refresh</label>
           </div>
           {/* Refresh Interval Select */}
-          <select
-            value={refreshInterval}
-            onChange={(e) => setRefreshInterval(Number(e.target.value))}
-            className="text-sm border border-gray-300 rounded-md px-3 py-2"
+          {/* Refresh Interval Select */}
+          <Select
+            value={refreshInterval.toString()}
+            onValueChange={(value) => setRefreshInterval(Number(value))}
           >
-            <option value={60}>1 min</option>
-            <option value={300}>5 min</option>
-            <option value={600}>10 min</option>
-            <option value={900}>15 min</option>
-          </select>
+            <SelectTrigger className="w-[120px] h-9">
+              <SelectValue placeholder="Interval" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="60000">1 min</SelectItem>
+              <SelectItem value="300000">5 min</SelectItem>
+              <SelectItem value="600000">10 min</SelectItem>
+              <SelectItem value="900000">15 min</SelectItem>
+            </SelectContent>
+          </Select>
 
+          {/* Use the new RefreshButton component */}
           <RefreshButton />
+
+          <AddLeadDialog onLeadAdded={handleLeadAdded} />
         </div>
       </div>
 

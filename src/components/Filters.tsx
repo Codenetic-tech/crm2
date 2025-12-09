@@ -25,6 +25,7 @@ export const statusOptions = [
     { value: 'Call Back', label: 'Call Back', color: 'bg-orange-100 text-orange-800' },
     { value: 'Switch off', label: 'Switch off', color: 'bg-gray-100 text-gray-800' },
     { value: 'RNR', label: 'RNR', color: 'bg-indigo-100 text-indigo-800' },
+    //{ value: 'won', label: 'won', color: 'bg-emerald-100 text-emerald-800' }
 ];
 
 export const getStatusColor = (status: string) => {
