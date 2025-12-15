@@ -184,19 +184,26 @@ const CRMDashboard: React.FC = () => {
 
   // Column Visibility State with Local Storage
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
+    // Define default visibility for columns
+    const defaultVisibility = {
+      other_brokers: false,
+      tag: false
+    };
+
     if (typeof window !== 'undefined') {
       try {
         const savedVisibility = localStorage.getItem('crm-column-visibility');
         if (savedVisibility) {
-          return JSON.parse(savedVisibility);
+          const parsed = JSON.parse(savedVisibility);
+          // Merge: defaults first, then override with saved settings
+          // This ensures new columns get their defaults while respecting saved preferences
+          return { ...defaultVisibility, ...parsed };
         }
       } catch (error) {
         console.error('Error loading column visibility from localStorage:', error);
       }
     }
-    return {
-      other_brokers: false // Default if nothing in localStorage
-    };
+    return defaultVisibility;
   });
 
 
@@ -463,6 +470,26 @@ const CRMDashboard: React.FC = () => {
       cell: ({ row }) => (
         <div className="text-sm text-gray-900 hidden lg:block font-normal">
           {row.getValue("source") || 'N/A'}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "tag",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Tag
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="text-sm text-gray-900 hidden lg:block font-normal">
+          {row.getValue("tag") || 'N/A'}
         </div>
       ),
     },

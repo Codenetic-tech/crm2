@@ -50,6 +50,7 @@ export interface APILead {
   _comments: string;
   language: string;
   other_brokers: string;
+  tag: string;
 }
 
 export interface Lead {
@@ -91,6 +92,7 @@ export interface Lead {
   _comments: string;
   language: string;
   other_brokers: string;
+  tag: string;
 }
 
 // LightLead interface for optimized caching
@@ -220,7 +222,8 @@ export const mapApiLeadToLead = (apiLead: APILead): Lead => {
     _assign: apiLead._assign,
     language: apiLead.language,
     other_brokers: apiLead.other_brokers,
-    _comments: apiLead._comments
+    _comments: apiLead._comments,
+    tag: apiLead.tag
   };
 };
 

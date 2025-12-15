@@ -25,6 +25,7 @@ import 'rsuite/CheckTreePicker/styles/index.css';
 import { useFilter } from '@/contexts/FilterContext';
 import CampaignLeadSourceChart from './CampaignLeadSourceChart';
 import LeadStatusSankeyChart from './Lead Details/LeadStatusSankeyChart';
+import RMWiseReport from './RMWiseReport';
 
 // Define types for hierarchy
 interface HierarchyNode {
@@ -324,8 +325,6 @@ const CRMAnalyticsDashboard: React.FC = () => {
 
     const statusCounts = {
       new: 0,
-      Contacted: 0,
-      qualified: 0,
       followup: 0,
       won: 0,
       'Not Interested': 0,
@@ -374,9 +373,7 @@ const CRMAnalyticsDashboard: React.FC = () => {
 
     const totalLeads = safeLeads.length;
     const newLeads = safeLeads.filter(lead => lead?.status === 'new').length;
-    const contactedLeads = safeLeads.filter(lead => lead?.status === 'Contacted').length;
     const followup = safeLeads.filter(lead => lead?.status === 'followup').length;
-    const qualifiedLeads = safeLeads.filter(lead => lead?.status === 'qualified').length;
     const wonLeads = safeLeads.filter(lead => lead?.status === 'won').length;
     const notInterested = safeLeads.filter(lead => lead?.status === 'Not Interested').length;
     const callBack = safeLeads.filter(lead => lead?.status === 'Call Back').length;
@@ -390,9 +387,7 @@ const CRMAnalyticsDashboard: React.FC = () => {
     return {
       totalLeads,
       newLeads,
-      contactedLeads,
       followup,
-      qualifiedLeads,
       wonLeads,
       notInterested,
       callBack,
@@ -428,9 +423,7 @@ const CRMAnalyticsDashboard: React.FC = () => {
   // Status colors
   const statusColors = [
     "#3b82f6", // blue-500 - New
-    "#8b5cf6", // purple-500 - Contacted
     "#f59e0b", // yellow-500 - Followup
-    "#10b981", // green-500 - Qualified
     "#059669", // emerald-600 - Won
     "#dc2626", // red-600 - Not Interested
     "#f97316", // orange-500 - Call Back
@@ -995,7 +988,7 @@ const CRMAnalyticsDashboard: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             {/* Calendar (1 column) */}
             <div className="lg:col-span-1">
-              <div className="bg-white rounded-2xl shadow-xl shadow-blue-100 p-6 border border-gray-100 hover:shadow-2xl transition-all duration-300 h-full">
+              <div className="bg-white rounded-2xl shadow-xl shadow-blue-50 p-6 border border-gray-100 hover:shadow-2xl hover:shadow-blue-100 transition-all duration-300 h-full">
                 <div className="flex items-center justify-between mb-6">
                   <div>
                     <h3 className="text-xl font-bold text-gray-900 mb-2">Calendar</h3>
@@ -1044,6 +1037,11 @@ const CRMAnalyticsDashboard: React.FC = () => {
             <div className="lg:col-span-2">
               <LeadStatusSankeyChart leads={filteredLeads} />
             </div>
+          </div>
+
+          {/* Third Row: RM Wise Report */}
+          <div className="mb-6">
+            <RMWiseReport leads={filteredLeads} />
           </div>
         </>
       )}

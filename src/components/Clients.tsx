@@ -1299,7 +1299,6 @@ const Clients: React.FC = () => {
           openDropdown={openDropdown}
           setOpenDropdown={setOpenDropdown}
           changeLeadStatus={changeLeadStatus}
-          onLeadAdded={handleLeadAdded}
         />
 
         {/* Desktop View with TanStack Table */}
@@ -1308,7 +1307,6 @@ const Clients: React.FC = () => {
           leads={leads}
           isInitialLoading={isInitialLoading}
           handleLeadClick={handleLeadClick}
-          onLeadAdded={handleLeadAdded}
         />
       </div>
 

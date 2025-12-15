@@ -100,7 +100,7 @@ const LeadStatusSankeyChart: React.FC<LeadStatusSankeyChartProps> = ({ leads }) 
     };
 
     return (
-        <div className="bg-white rounded-2xl shadow-xl shadow-blue-100 p-6 border border-gray-100 hover:shadow-2xl transition-all duration-300">
+        <div className="bg-white rounded-2xl shadow-xl shadow-blue-50 p-6 border border-gray-100 hover:shadow-2xl hover:shadow-blue-100 transition-all duration-300">
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h3 className="text-xl font-bold text-gray-900 mb-2">Lead Flow Distribution</h3>
