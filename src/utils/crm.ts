@@ -51,6 +51,11 @@ export interface APILead {
   language: string;
   other_brokers: string;
   tag: string;
+  stage: string;
+  kyc_stage: string;
+  application: string;
+  application_created_date: string;
+  application_status: string;
 }
 
 export interface Lead {
@@ -93,6 +98,11 @@ export interface Lead {
   language: string;
   other_brokers: string;
   tag: string;
+  stage: string;
+  kyc_stage: string;
+  application: string;
+  application_created_date: string;
+  application_status: string;
 }
 
 // LightLead interface for optimized caching
@@ -223,7 +233,12 @@ export const mapApiLeadToLead = (apiLead: APILead): Lead => {
     language: apiLead.language,
     other_brokers: apiLead.other_brokers,
     _comments: apiLead._comments,
-    tag: apiLead.tag
+    tag: apiLead.tag,
+    stage: apiLead.stage,
+    kyc_stage: apiLead.kyc_stage,
+    application: apiLead.application,
+    application_created_date: apiLead.application_created_date,
+    application_status: apiLead.application_status
   };
 };
 

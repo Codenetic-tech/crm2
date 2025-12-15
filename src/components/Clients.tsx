@@ -824,10 +824,10 @@ const Clients: React.FC = () => {
     },
   ];
 
-  // Filter leads to only include 'won' and 'client' statuses
+  // Filter leads to only include 'client' statuses
   const filteredLeads = useMemo(() => {
     return leads.filter(lead =>
-      ['won', 'client'].includes(lead.status)
+      ['client'].includes(lead.status)
     );
   }, [leads]);
 
@@ -1052,7 +1052,7 @@ const Clients: React.FC = () => {
   };
 
   return (
-    <div className="lg:pl-6">
+    <div className="">
       {/* Comment Modal */}
       <CommentModal
         isOpen={isCommentModalOpen}
@@ -1067,52 +1067,6 @@ const Clients: React.FC = () => {
       {/* Mobile Header */}
       <MobileHeader setMobileMenuOpen={setMobileMenuOpen} summaryData={summaryData} />
 
-      {/* Desktop Header - Hidden on mobile */}
-      <div className="hidden lg:flex flex-row items-center justify-between gap-4 mb-8">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-lg sm:text-2xl font-bold text-foreground">
-              <span className="text-violet-700">{getGreeting()}</span> {formatName(user?.firstName)}
-            </h1>
-          </div>
-
-
-        </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-          {/* Auto Refresh Toggle */}
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="autoRefresh"
-              checked={autoRefresh}
-              onChange={(e) => setAutoRefresh(e.target.checked)}
-              className="h-4 w-4 text-blue-600 rounded"
-            />
-            <label htmlFor="autoRefresh" className="text-sm text-gray-700">Auto Refresh</label>
-          </div>
-          {/* Refresh Interval Select */}
-          {/* Refresh Interval Select */}
-          <Select
-            value={refreshInterval.toString()}
-            onValueChange={(value) => setRefreshInterval(Number(value))}
-          >
-            <SelectTrigger className="w-[120px] h-9">
-              <SelectValue placeholder="Interval" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="60000">1 min</SelectItem>
-              <SelectItem value="300000">5 min</SelectItem>
-              <SelectItem value="600000">10 min</SelectItem>
-              <SelectItem value="900000">15 min</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Use the new RefreshButton component */}
-          <RefreshButton />
-
-          <AddLeadDialog onLeadAdded={handleLeadAdded} />
-        </div>
-      </div>
 
       {/* Error Alert */}
       {error && (
@@ -1122,23 +1076,17 @@ const Clients: React.FC = () => {
       )}
 
       {/* Summary Cards - Responsive Grid - Hidden on mobile */}
-      <div className="hidden lg:grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+      <div className="hidden lg:grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
         <SummaryCard
-          title="Total Leads" value={summaryData.totalLeads} icon={Users} color="blue" shadowColor="blue" trend={{ value: 12.5, isPositive: true }} showTrend={true} className="h-full" />
+          title="Total Clients" value={summaryData.totalLeads} icon={Users} color="blue" shadowColor="blue" trend={{ value: 12.5, isPositive: true }} showTrend={true} className="h-full" />
 
         <SummaryCard
-          title="Total Converted Leads" value={summaryData.wonleads} icon={User} color="green" shadowColor="green" trend={{ value: 8.2, isPositive: true }} showTrend={true} className="h-full" />
-
-        <SummaryCard
-          title="First Traded Clients" value={summaryData.firstTradedClients} icon={BookText} color="orange" shadowColor="orange" trend={{ value: 22.1, isPositive: true }}
+          title="First Traded Clients" value={summaryData.firstTradedClients} icon={BookText} color="blue" shadowColor="blue" trend={{ value: 22.1, isPositive: true }}
           showTrend={true} className="h-full" />
 
         <SummaryCard
-          title="Payin Done Clients" value={summaryData.followup} icon={CalendarCheck} color="yellow" shadowColor="yellow" trend={{ value: 22.1, isPositive: true }}
+          title="Payin Done Clients" value={summaryData.followup} icon={CalendarCheck} color="blue" shadowColor="blue" trend={{ value: 22.1, isPositive: true }}
           showTrend={true} className="h-full" />
-
-        <SummaryCard
-          title="Qualified Leads" value={summaryData.qualifiedLeads} icon={CheckSquare} color="purple" shadowColor="purple" trend={{ value: 15.3, isPositive: true }} showTrend={true} className="h-full" />
 
         <SummaryCard
           title="Conversion Rate" value={summaryData.conversionRate} icon={TrendingUp} color="red" shadowColor="red" trend={{ value: 5.7, isPositive: true }}

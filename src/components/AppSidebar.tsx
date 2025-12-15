@@ -57,14 +57,6 @@ const allMenuItems = [
     roles: ['manager', 'employee']
   },
   {
-    title: 'Client',
-    url: '/client',
-    icon: User2,
-    color: 'text-emerald-500',
-    bgColor: 'bg-emerald-50',
-    roles: ['manager', 'employee']
-  },
-  {
     title: 'Incentive',
     url: '/incentive',
     icon: IndianRupee,
@@ -237,8 +229,8 @@ export function AppSidebar() {
                         <NavLink
                           to={item.url}
                           className={`group relative transition-all duration-200 ${isItemActive
-                              ? "text-blue-700 font-semibold"
-                              : ""
+                            ? "text-blue-700 font-semibold"
+                            : ""
                             } ${isCollapsed ? '' : ''} ${isItemActive
                               ? ''
                               : ''

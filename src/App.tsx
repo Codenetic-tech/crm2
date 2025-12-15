@@ -19,6 +19,7 @@ import TasksKanbanPage from './components/tasks-kanban';
 import PettyCashPage from './components/petty-cash';
 import PettyCashManagement from './components/PettyCash/PettyCashManagement';
 import HRMS from './pages/hrms';
+import CRMPage from './pages/crm';
 
 const queryClient = new QueryClient();
 
@@ -84,7 +85,7 @@ const AppContent = () => {
           path="/crm"
           element={
             <ProtectedRoute>
-              <CRMDashboard />
+              <CRMPage />
             </ProtectedRoute>
           }
         />

@@ -5,7 +5,7 @@ import {
   Check, Wifi, WifiOff,
   Clock, ChevronsUpDown, ArrowUpDown, ChevronDown,
   MoreVertical, RefreshCw, CalendarCheck, PhoneMissed, CheckSquare,
-  Building2, Search, Filter
+  Building2, Search, Filter, TrendingUp, BookText
 } from 'lucide-react';
 import {
   TooltipContent,
@@ -21,6 +21,7 @@ import { type Lead, clearAllCache } from '@/utils/crm';
 import { SummaryCard } from './SummaryCard';
 import { AddLeadDialog } from './AddLeadDialog';
 import CommentModal from '@/components/CRM/CommentModal';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Import shadcn table components
 import {
@@ -63,13 +64,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 // Import Refactored Components
 import {
@@ -92,7 +86,7 @@ import {
 } from './MobileView';
 
 // Rate limiting constants
-const REFRESH_COOLDOWN_MS = 30 * 1000; // 30 seconds in milliseconds
+const REFRESH_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes in milliseconds
 
 // Custom filter functions for TanStack Table
 const globalFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string) => {
@@ -136,11 +130,7 @@ const assignedUserFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string
   }
 };
 
-interface CRMDashboardProps {
-  hideHeader?: boolean;
-}
-
-const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
+const Converted: React.FC = () => {
   const { user } = useAuth();
   const { leads, isLoading: isLeadsLoading, isRefreshing: isLeadsRefreshing, refreshLeads, updateLead } = useLeads();
   const navigate = useNavigate();
@@ -152,7 +142,7 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
   // Local UI State
   const [error, setError] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
+  const [isChangingStatus, setIsChangingStatus] = useState<string | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [selectedLeadForComment, setSelectedLeadForComment] = useState<Lead | null>(null);
   const [newComment, setNewComment] = useState('');
@@ -160,10 +150,10 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
   const [isPostingComment, setIsPostingComment] = useState(false);
 
   // Refresh interval state
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState(300000); // 5 minutes default
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [refreshInterval, setRefreshInterval] = useState(120000); // 2 minutes default
 
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'createdAt', desc: true }]);
+  const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
   // Missing states for filters and refresh
@@ -174,48 +164,26 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
   const [lastRefreshTime, setLastRefreshTime] = useState<number | null>(null);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const cooldownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [canRefresh, setCanRefresh] = useState(true);
+
+  // Helper functions for cooldown
+  const formatCooldownTime = (ms: number) => {
+    const seconds = Math.ceil(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const getCooldownRemaining = () => {
+    if (!lastRefreshTime) return 0;
+    const timeSinceLastRefresh = Date.now() - lastRefreshTime;
+    return Math.max(0, REFRESH_COOLDOWN_MS - timeSinceLastRefresh);
+  };
+
 
   // Mobile menu states
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [mobileColumnVisibilityOpen, setMobileColumnVisibilityOpen] = useState(false);
-
-  // Bulk Assign State
-  const [selectedTeamMember, setSelectedTeamMember] = useState<string>("");
-  const [isAssigning, setIsAssigning] = useState(false);
-
-  // Changed to string | false to hold the ID of the lead being changed, or false if none
-  const [isChangingStatus, setIsChangingStatus] = useState<string | false>(false);
-
-  // Column Visibility State with Local Storage
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
-    // Define default visibility for columns
-    const defaultVisibility = {
-      other_brokers: false,
-      tag: false
-    };
-
-    if (typeof window !== 'undefined') {
-      try {
-        const savedVisibility = localStorage.getItem('crm-column-visibility');
-        if (savedVisibility) {
-          const parsed = JSON.parse(savedVisibility);
-          // Merge: defaults first, then override with saved settings
-          // This ensures new columns get their defaults while respecting saved preferences
-          return { ...defaultVisibility, ...parsed };
-        }
-      } catch (error) {
-        console.error('Error loading column visibility from localStorage:', error);
-      }
-    }
-    return defaultVisibility;
-  });
-
-
-
-  // Connection and Refresh States
-  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'syncing' | 'disconnected'>('connected');
-  const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
-  const [canRefresh, setCanRefresh] = useState(true);
 
   const handleRateLimitedRefresh = async () => {
     if (!canRefresh) return;
@@ -259,13 +227,28 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
     };
   }, [autoRefresh, refreshInterval, canRefresh, isLeadsRefreshing]);
 
-  // Persist column visibility
+  // Column Visibility State with Local Storage
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedVisibility = localStorage.getItem('crm-clients-column-visibility');
+        if (savedVisibility) {
+          return JSON.parse(savedVisibility);
+        }
+      } catch (error) {
+        console.error('Error loading column visibility from localStorage:', error);
+      }
+    }
+    return {
+      other_brokers: false // Default if nothing in localStorage
+    };
+  });
 
   // Persist column visibility
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem('crm-column-visibility', JSON.stringify(columnVisibility));
+        localStorage.setItem('crm-clients-column-visibility', JSON.stringify(columnVisibility));
       } catch (error) {
         console.error('Error saving column visibility to localStorage:', error);
       }
@@ -282,9 +265,10 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
 
   const [rowSelection, setRowSelection] = useState({});
 
+
+  // Get actual user credentials from auth context
   const employeeId = user?.employeeId || '';
   const email = user?.email || '';
-  const teamMembers = user?.team ? JSON.parse(user.team) : [];
 
   // Helper function to get display name from email
   const getDisplayName = (email: string) => {
@@ -326,14 +310,9 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
         throw new Error(`Failed to post comment: ${response.status}`);
       }
 
-      // Clear the form and close modal
       setNewComment('');
       setIsCommentModalOpen(false);
-
-      // Refresh the data
       handleClearCacheAndRefresh();
-
-      console.log('Comment posted successfully');
 
     } catch (error: any) {
       console.error('Error posting comment:', error);
@@ -364,7 +343,6 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
     return [{ value: 'all', label: 'All Campaigns' }, ...campaigns];
   }, [leads]);
 
-  // Get unique campaigns and assigned users
   const sourceOptions = useMemo(() => {
     const source = Array.from(new Set(
       leads
@@ -402,7 +380,7 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
     return [{ value: 'all', label: 'All Users' }, ...userOptions];
   }, [leads]);
 
-  // Update the column definitions with consistent styling
+  // Column definitions
   const columns: ColumnDef<Lead>[] = [
     {
       id: "select",
@@ -448,14 +426,31 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
               {lead.name.split(' ').map(n => n[0]).join('')}
             </div>
             <div>
-              <p className="font-medium text-gray-900 text-base">{lead.name}</p>
-              {lead.ucc && (
-                <p className="text-xs text-gray-500 mt-0.5">UCC: {lead.ucc}</p>
-              )}
+              <p className="font-medium text-gray-900 text-sm">{lead.name}</p>
             </div>
           </div>
         )
       },
+    },
+    {
+      accessorKey: "ucc",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            UCC
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="text-sm text-gray-900 hidden lg:block font-normal">
+          {row.getValue("ucc") || 'N/A'}
+        </div>
+      ),
     },
     {
       accessorKey: "source",
@@ -474,26 +469,6 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
       cell: ({ row }) => (
         <div className="text-sm text-gray-900 hidden lg:block font-normal">
           {row.getValue("source") || 'N/A'}
-        </div>
-      ),
-    },
-    {
-      accessorKey: "tag",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
-          >
-            Tag
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        )
-      },
-      cell: ({ row }) => (
-        <div className="text-sm text-gray-900 hidden lg:block font-normal">
-          {row.getValue("tag") || 'N/A'}
         </div>
       ),
     },
@@ -535,7 +510,7 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
           <PhoneIcon size={14} className="text-gray-400" />
-          <span className="text-base text-gray-900 font-normal">{row.getValue("phone")}</span>
+          <span className="text-sm text-gray-900 font-normal">{row.getValue("phone")}</span>
         </div>
       ),
     },
@@ -554,16 +529,29 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
         )
       },
       cell: ({ row }) => (
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Building2 size={16} className="text-gray-400" />
-            <span className="text-sm text-gray-900 font-normal">{row.getValue("city") || 'N/A'}</span>
-          </div>
-          {row.original.branchCode && (
-            <div className="text-xs text-gray-500 hidden sm:block">
-              Branch: {row.original.branchCode}
-            </div>
-          )}
+        <div className="flex items-center gap-2">
+          <Building2 size={16} className="text-gray-400" />
+          <span className="text-sm text-gray-900 font-normal">{row.getValue("city") || 'N/A'}</span>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "branchCode",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Branch
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="text-sm text-gray-900 hidden lg:block font-normal">
+          {row.original.branchCode || 'N/A'}
         </div>
       ),
     },
@@ -643,7 +631,6 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
       ),
       cell: ({ row }) => {
         const commentsRaw = row.getValue("_comments") as string;
-        const lead = row.original;
 
         let latestComment = null;
         let commentCount = 0;
@@ -816,7 +803,6 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
 
               {openDropdown === lead.id && (
                 <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1 hidden lg:block">
-                  {/* Add Comment Button at the top */}
                   <button
                     className="w-full text-left px-4 py-2 text-sm flex items-center gap-2 hover:bg-gray-50"
                     onClick={(e) => {
@@ -828,30 +814,6 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
                     <MessageCircle size={14} className="text-blue-500" />
                     <span className="font-normal">Add Comment</span>
                   </button>
-
-                  <div className="px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-100">
-                    Change Status
-                  </div>
-                  {statusOptions.map((status) => (
-                    <button
-                      key={status.value}
-                      className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between hover:bg-gray-50 ${lead.status === status.value ? 'bg-blue-50' : ''
-                        }`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        changeLeadStatus(lead.id, status.value, lead.name);
-                        setOpenDropdown(null);
-                      }}
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <div className={`w-2 h-2 rounded-full ${status.color.split(' ')[0]} flex-shrink-0`} />
-                        <span className="font-normal truncate">{status.label}</span>
-                      </div>
-                      {lead.status === status.value && (
-                        <Check size={16} className="text-blue-600 flex-shrink-0 ml-2" />
-                      )}
-                    </button>
-                  ))}
                 </div>
               )}
             </div>
@@ -862,11 +824,10 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
     },
   ];
 
-  // Filter leads to only include relevant statuses and Exclude KYC Stage
+  // Filter leads to only include 'won'
   const filteredLeads = useMemo(() => {
     return leads.filter(lead =>
-      ['new', 'Contacted', 'qualified', 'followup', 'Not Interested', 'Call Back', 'Switch off', 'RNR', 'won'].includes(lead.status) &&
-      lead.stage !== 'KYC Stage'
+      ['won'].includes(lead.status)
     );
   }, [leads]);
 
@@ -893,7 +854,7 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
     },
   });
 
-  // Apply campaign and assigned user filters
+  // Apply filters
   useEffect(() => {
     if (selectedCampaign && selectedCampaign !== 'all') {
       table.getColumn('campaign')?.setFilterValue(selectedCampaign);
@@ -914,12 +875,12 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
     if (selectedAssignedUser && selectedAssignedUser !== 'all') {
       table.getColumn('_assign')?.setFilterValue(selectedAssignedUser);
     } else {
-      // Clear the filter when "All Users" is selected
       table.getColumn('_assign')?.setFilterValue('');
     }
   }, [selectedAssignedUser, table]);
 
-  // Function to change lead status
+
+
   const changeLeadStatus = async (leadId: string, newStatus: string, leadName: string) => {
     setIsChangingStatus(leadId);
     setOpenDropdown(null);
@@ -945,149 +906,23 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const result = await response.json();
-      console.log('Status change response:', result);
-
       const leadToUpdate = leads.find(l => l.id === leadId);
       if (leadToUpdate) {
         updateLead({ ...leadToUpdate, status: newStatus as Lead['status'] });
       }
 
-      console.log(`Status changed to ${newStatus} for lead: ${leadName}`);
-
     } catch (error: any) {
       console.error('Error changing lead status:', error);
       setError(`Failed to change status: ${error.message}`);
     } finally {
-      setIsChangingStatus(false);
+      setIsChangingStatus(null);
+      setOpenDropdown(null);
       handleClearCacheAndRefresh();
     }
   };
-
-  // Bulk action functions
-  const handleBulkAssign = async () => {
-    const selectedLeads = table.getFilteredSelectedRowModel().rows.map(row => row.original.id);
-    if (!selectedTeamMember || selectedLeads.length === 0) return;
-
-    setIsAssigning(true);
-    try {
-      const response = await fetch('https://n8n.gopocket.in/webhook/hrms', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          doctype: "CRM Lead",
-          name: JSON.stringify(selectedLeads),
-          assign_to: [selectedTeamMember],
-          bulk_assign: true,
-          re_assign: true
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log('Bulk assign response:', result);
-
-      setSelectedTeamMember('');
-      table.toggleAllPageRowsSelected(false);
-
-      handleClearCacheAndRefresh();
-
-    } catch (error: any) {
-      console.error('Error in bulk assignment:', error);
-      setError(`Failed to assign leads: ${error.message}`);
-    } finally {
-      setIsAssigning(false);
-    }
-  };
-
-
-  // Bulk Actions Bar Component
-  const BulkActionsBar = () => {
-    const selectedLeads = table.getFilteredSelectedRowModel().rows;
-    if (selectedLeads.length === 0) return null;
-
-    return (
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4 mb-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
-            <span className="text-blue-800 font-medium text-sm sm:text-base">
-              {selectedLeads.length} lead{selectedLeads.length !== 1 ? 's' : ''} selected
-            </span>
-
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  className="w-full sm:w-[280px] justify-between bg-white border-slate-300 rounded-xl shadow-sm hover:bg-slate-50 text-sm"
-                >
-                  {selectedTeamMember ? getDisplayName(selectedTeamMember) : "Select team member"}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full sm:w-[280px] p-0 max-h-90 overflow-hidden">
-                <Command className="max-h-90">
-                  <CommandInput placeholder="Search users..." className="h-9" />
-                  <CommandList className="max-h-60 overflow-y-auto">
-                    <CommandEmpty>No user found.</CommandEmpty>
-                    <CommandGroup>
-                      {teamMembers.map((user: string) => (
-                        <CommandItem
-                          key={user}
-                          value={user}
-                          onSelect={(currentValue) => {
-                            setSelectedTeamMember(currentValue === selectedTeamMember ? "" : currentValue);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              selectedTeamMember === user ? "opacity-100" : "opacity-0"
-                            )}
-                          />
-                          {getDisplayName(user)}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-
-            <button
-              onClick={handleBulkAssign}
-              disabled={!selectedTeamMember || isAssigning}
-              className="w-full sm:w-auto px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 justify-center text-sm"
-            >
-              {isAssigning ? (
-                <RefreshCw size={14} className="animate-spin" />
-              ) : (
-                <Users size={14} />
-              )}
-              Assign Selected
-            </button>
-          </div>
-
-          <button
-            onClick={() => table.toggleAllPageRowsSelected(false)}
-            className="text-gray-500 hover:text-gray-700 text-sm w-full sm:w-auto text-center"
-          >
-            Clear selection
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-
 
   const summaryData = useMemo(() => {
-    if (isLeadsLoading) {
+    if (isInitialLoading) {
       return {
         totalLeads: 0,
         newLeads: 0,
@@ -1104,44 +939,30 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
         switchoff: 0,
         callback: 0,
         won: 0,
-        newRecordsCount: 0,
-        modifiedRecordsCount: 0
       };
     }
-
     // Get filtered leads from table
     const currentLeads = table.getFilteredRowModel().rows.map(row => row.original);
 
     // Calculate summary from filtered leads
     return {
-      totalLeads: currentLeads.length,
-      newLeads: currentLeads.filter(l => l.status === 'new').length,
-      contactedLeads: currentLeads.filter(l => l.status === 'Contacted').length,
-      followup: currentLeads.filter(l => l.status === 'followup').length,
-      qualifiedLeads: currentLeads.filter(l => l.status === 'qualified').length,
-      wonleads: currentLeads.filter(l => l.status === 'won').length,
-      totalValue: currentLeads.reduce((acc, curr) => acc + (curr.value || 0), 0),
-      conversionRate: 0, // Calculate as needed
-      firstTradedClients: currentLeads.filter(l => l.tradeDone === "TRUE").length,
-      notinterested: currentLeads.filter(l => l.status === 'Not Interested').length,
-      existingclient: currentLeads.filter(l => l.status === 'won').length,
-      rnr: currentLeads.filter(l => l.status === 'RNR').length,
-      switchoff: currentLeads.filter(l => l.status === 'Switch off').length,
-      callback: currentLeads.filter(l => l.status === 'Call Back').length,
-      won: currentLeads.filter(l => l.status === 'won').length,
-      newRecordsCount: 0,
-      modifiedRecordsCount: 0
+      totalLeads: leads.length,
+      newLeads: currentLeads.filter(lead => lead.status === 'new').length,
+      contactedLeads: currentLeads.filter(lead => lead.status === 'Contacted').length,
+      followup: currentLeads.filter(lead => lead.status === 'followup').length,
+      wonleads: currentLeads.filter(lead => lead.status === 'won').length,
+      qualifiedLeads: currentLeads.filter(lead => lead.status === 'qualified').length,
+      totalValue: currentLeads.reduce((sum, lead) => sum + lead.value, 0),
+      firstTradedClients: currentLeads.filter(lead => lead.tradeDone === "TRUE").length,
+      conversionRate: Math.round((currentLeads.filter(lead => ['qualified', 'negotiation', 'won'].includes(lead.status)).length / Math.max(currentLeads.length, 1)) * 100),
+      notinterested: currentLeads.filter(lead => lead.status === 'Not Interested').length,
+      existingclient: currentLeads.filter(lead => lead.status === 'won').length,
+      rnr: currentLeads.filter(lead => lead.status === 'RNR').length,
+      switchoff: currentLeads.filter(lead => lead.status === 'Switch off').length,
+      callback: currentLeads.filter(lead => lead.status === 'Call Back').length,
+      won: currentLeads.filter(lead => lead.status === 'won').length,
     };
-
-  }, [leads, isLeadsLoading, columnFilters, globalFilter, table]);
-
-
-
-  const handleLeadClick = (leadId: string) => {
-    if (table.getFilteredSelectedRowModel().rows.length === 0) {
-      navigate(`/crm/leads/${leadId}`);
-    }
-  };
+  }, [leads, isInitialLoading, columnFilters, globalFilter, table]);
 
   const handleLeadAdded = async () => {
     await handleClearCacheAndRefresh();
@@ -1152,43 +973,54 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
     setOpenDropdown(openDropdown === leadId ? null : leadId);
   };
 
-  const getConnectionStatusIcon = () => {
-    switch (connectionStatus) {
-      case 'connected':
-        return <Wifi className="h-4 w-4 text-green-500" />;
-      case 'syncing':
-        return <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />;
-      case 'disconnected':
-        return <WifiOff className="h-4 w-4 text-red-500" />;
-      default:
-        return <Wifi className="h-4 w-4 text-gray-500" />;
+  const handleLeadClick = (leadId: string) => {
+    if (table.getFilteredSelectedRowModel().rows.length === 0) {
+      navigate(`/crm/leads/${leadId}`);
     }
   };
 
-  // Refresh button component with rate limiting
   const RefreshButton = () => {
-    const isRefreshing = isManualRefreshing || isAutoRefreshing;
+    const isRefreshing = isManualRefreshing;
     const isDisabled = !canRefresh || isRefreshing || isInitialLoading;
 
-    const buttonContent = isRefreshing ? (
-      <>
-        <RefreshCw size={16} className="animate-spin" />
-        Refreshing...
-      </>
-    ) : (
-      <>
-        <RefreshCw size={16} />
-      </>
-    );
+    let buttonContent;
+    if (isRefreshing) {
+      buttonContent = (
+        <>
+          <RefreshCw size={16} className="animate-spin" />
+          Refreshing...
+        </>
+      );
+    } else if (!canRefresh && cooldownRemaining > 0) {
+      buttonContent = (
+        <>
+          <Clock size={16} />
+          {formatCooldownTime(cooldownRemaining)}
+        </>
+      );
+    } else {
+      buttonContent = (
+        <>
+          <RefreshCw size={16} />
+          Refresh
+        </>
+      );
+    }
 
     return (
       <button
         onClick={handleRateLimitedRefresh}
         disabled={isDisabled}
-        className="px-4 py-2 text-gray-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-all flex items-center gap-2 justify-center text-sm disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
-        title={isRefreshing ? 'Refreshing...' : isDisabled ? 'Please wait before refreshing again' : 'Refresh leads'}
+        className="px-4 py-2 text-gray-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-all flex items-center gap-2 justify-center text-sm disabled:opacity-50 disabled:cursor-not-allowed relative group shadow-sm hover:shadow-md"
+        title={!canRefresh ? `Available in ${formatCooldownTime(cooldownRemaining)}` : 'Refresh leads'}
       >
         {buttonContent}
+
+        {!canRefresh && cooldownRemaining > 0 && (
+          <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap shadow-lg z-10">
+            Available in {formatCooldownTime(cooldownRemaining)}
+          </div>
+        )}
       </button>
     );
   };
@@ -1235,54 +1067,6 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
       {/* Mobile Header */}
       <MobileHeader setMobileMenuOpen={setMobileMenuOpen} summaryData={summaryData} />
 
-      {/* Desktop Header - Hidden on mobile */}
-      {!hideHeader && (
-        <div className="hidden lg:flex flex-row items-center justify-between gap-4 mb-8">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-lg sm:text-2xl font-bold text-foreground">
-                <span className="text-violet-700">{getGreeting()}</span> {formatName(user?.firstName)}
-              </h1>
-            </div>
-
-
-          </div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-            {/* Auto Refresh Toggle */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="autoRefresh"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-                className="h-4 w-4 text-blue-600 rounded"
-              />
-              <label htmlFor="autoRefresh" className="text-sm text-gray-700">Auto Refresh</label>
-            </div>
-            {/* Refresh Interval Select */}
-            {/* Refresh Interval Select */}
-            <Select
-              value={refreshInterval.toString()}
-              onValueChange={(value) => setRefreshInterval(Number(value))}
-            >
-              <SelectTrigger className="w-[120px] h-9">
-                <SelectValue placeholder="Interval" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="60000">1 min</SelectItem>
-                <SelectItem value="300000">5 min</SelectItem>
-                <SelectItem value="600000">10 min</SelectItem>
-                <SelectItem value="900000">15 min</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Use the new RefreshButton component */}
-            <RefreshButton />
-
-            <AddLeadDialog onLeadAdded={handleLeadAdded} />
-          </div>
-        </div>
-      )}
 
       {/* Error Alert */}
       {error && (
@@ -1291,32 +1075,24 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
         </div>
       )}
 
-      {/* Summary Cards - Responsive Grid - Hidden on mobile (we show quick stats in header instead) */}
-      <div className="hidden lg:grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
-        <SummaryCard
-          title="Total Leads" value={summaryData.totalLeads} icon={Users} color="blue" shadowColor="blue" trend={{ value: 12.5, isPositive: true }} showTrend={true} className="h-full" />
+      {/* Summary Cards - Responsive Grid - Hidden on mobile */}
+      <div className="hidden lg:grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
 
         <SummaryCard
-          title="New Leads" value={summaryData.newLeads} icon={User} color="blue" shadowColor="blue" trend={{ value: 8.2, isPositive: true }} showTrend={true} className="h-full" />
+          title="Total Converted Leads" value={summaryData.wonleads} icon={User} color="blue" shadowColor="blue" trend={{ value: 8.2, isPositive: true }} showTrend={true} className="h-full" />
 
         <SummaryCard
-          title="Followup" value={summaryData.followup} icon={CalendarCheck} color="blue" shadowColor="blue" trend={{ value: 22.1, isPositive: true }}
+          title="First Traded Clients" value={summaryData.firstTradedClients} icon={BookText} color="blue" shadowColor="blue" trend={{ value: 22.1, isPositive: true }}
           showTrend={true} className="h-full" />
 
         <SummaryCard
-          title="Other status" value={summaryData.contactedLeads + summaryData.rnr + summaryData.callback + summaryData.switchoff} icon={CalendarCheck} color="blue" shadowColor="blue" trend={{ value: 22.1, isPositive: true }}
+          title="Payin Done Clients" value={summaryData.followup} icon={CalendarCheck} color="blue" shadowColor="blue" trend={{ value: 22.1, isPositive: true }}
           showTrend={true} className="h-full" />
 
         <SummaryCard
-          title="Not Interested" value={summaryData.notinterested} icon={PhoneMissed} color="red" shadowColor="red" trend={{ value: 8.1, isPositive: false }}
-          showTrend={true} className="h-full" />
-
-        <SummaryCard
-          title="Won Leads" value={summaryData.won} icon={CheckSquare} color="green" shadowColor="green" trend={{ value: 15.3, isPositive: true }} showTrend={true} className="h-full" />
+          title="Conversion Rate" value={summaryData.conversionRate} icon={TrendingUp} color="red" shadowColor="red" trend={{ value: 5.7, isPositive: true }}
+          showTrend={true} suffix="%" className="h-full" />
       </div>
-
-      {/* Bulk Actions Bar */}
-      <BulkActionsBar />
 
       {/* Mobile Search */}
       <MobileSearchBar globalFilter={globalFilter} setGlobalFilter={setGlobalFilter} />
@@ -1410,7 +1186,7 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
                 >
                   All Status
                 </DropdownMenuCheckboxItem>
-                {statusOptions.map((status) => (
+                {statusOptions.filter(s => ['won', 'client'].includes(s.value)).map((status) => (
                   <DropdownMenuCheckboxItem
                     key={status.value}
                     checked={table.getColumn('status')?.getFilterValue() === status.value}
@@ -1468,7 +1244,7 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
           table={table}
           handleLeadClick={handleLeadClick}
           toggleDropdown={toggleDropdown}
-          isChangingStatus={typeof isChangingStatus === 'string' ? isChangingStatus : undefined}
+          isChangingStatus={isChangingStatus}
           openDropdown={openDropdown}
           setOpenDropdown={setOpenDropdown}
           changeLeadStatus={changeLeadStatus}
@@ -1498,4 +1274,4 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
   );
 };
 
-export default CRMDashboard;
+export default Converted;
