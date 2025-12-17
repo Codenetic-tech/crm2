@@ -14,6 +14,7 @@ import { getCachedLeadDetails, getCachedComments, saveCommentsToCache, type Comm
 import { useAuth } from '@/contexts/AuthContext';
 import LeadTasksTab from '@/components/CRM/Lead Details/LeadTasksTab';
 import LeadFormTab from '@/components/CRM/Lead Details/LeadFormTab';
+import { CampaignFilter, AssignedUserFilter, SourceFilter, statusOptions, getStatusColor as getSharedStatusColor } from '@/components/Filters';
 
 // Import combobox components
 import {
@@ -38,19 +39,6 @@ interface Tab {
   label: string;
   icon: React.ComponentType<any>;
 }
-
-// Status options for filter
-const statusOptions = [
-  { value: 'all', label: 'All Status' },
-  { value: 'new', label: 'New', color: 'bg-blue-100 text-blue-800' },
-  { value: 'Contacted', label: 'Contacted', color: 'bg-purple-100 text-purple-800' },
-  { value: 'followup', label: 'Followup', color: 'bg-yellow-100 text-yellow-800' },
-  { value: 'qualified', label: 'Qualified', color: 'bg-green-100 text-green-800' },
-  { value: 'Not Interested', label: 'Not Interested', color: 'bg-red-100 text-red-800' },
-  { value: 'Call Back', label: 'Call Back', color: 'bg-orange-100 text-orange-800' },
-  { value: 'Switch off', label: 'Switch off', color: 'bg-red-100 text-red-800' },
-  { value: 'RNR', label: 'RNR', color: 'bg-indigo-100 text-indigo-800' },
-];
 
 // Filter functions
 const globalFilterFn = (lead: Lead, filterValue: string) => {
@@ -92,6 +80,11 @@ const statusFilterFn = (lead: Lead, filterValue: string) => {
   return lead.status === filterValue;
 };
 
+const sourceFilterFn = (lead: Lead, filterValue: string) => {
+  if (!filterValue || filterValue === 'all') return true;
+  return (lead.source || '').toLowerCase() === filterValue.toLowerCase();
+};
+
 // Mock data for different tabs (you can replace these with API calls later)
 const mockActivities = [
   { id: 1, action: 'Lead created', date: '2024-01-15 10:30 AM', user: 'System', type: 'created', description: 'New lead registered in system' },
@@ -113,6 +106,55 @@ const mockWhatsAppMessages = [
   { id: 4, text: 'Yes, that would be perfect. How about next Tuesday?', time: '10:35 AM', sent: false },
   { id: 5, text: 'Tuesday works for me. I\'ll send over a calendar invite shortly.', time: '10:36 AM', sent: true }
 ];
+
+const LeadTimer: React.FC<{ createdAt: string }> = ({ createdAt }) => {
+  const [timeRemaining, setTimeRemaining] = useState('');
+  const [isExpired, setIsExpired] = useState(false);
+
+  useEffect(() => {
+    const updateTimer = () => {
+      const createdDate = new Date(createdAt);
+      const expirationDate = new Date(createdDate.getTime() + (45 * 24 * 60 * 60 * 1000)); // 45 days validity
+      const now = new Date().getTime();
+      const diff = expirationDate.getTime() - now;
+
+      if (diff <= 0) {
+        setIsExpired(true);
+        setTimeRemaining('Expired');
+        return;
+      }
+
+      setIsExpired(false);
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      // const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)); // Optional: detail level
+
+      const parts = [];
+      if (days > 0) parts.push(`${days}d`);
+      parts.push(`${hours}h`);
+
+      setTimeRemaining(`${parts.join(' ')} remaining`);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, [createdAt]);
+
+  return (
+    <div
+      className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${isExpired
+        ? 'bg-red-50 text-red-600 border-red-200'
+        : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+        }`}
+      title="Time remaining to convert (45 days validity)"
+    >
+      <Clock size={12} className={isExpired ? "text-red-500" : "text-emerald-500"} />
+      <span>{timeRemaining}</span>
+    </div>
+  );
+};
 
 const LeadDetailsPage: React.FC = () => {
   const { user } = useAuth();
@@ -139,6 +181,7 @@ const LeadDetailsPage: React.FC = () => {
   // Filter states
   const [globalFilter, setGlobalFilter] = useState('');
   const [selectedCampaign, setSelectedCampaign] = useState('');
+  const [selectedSource, setSelectedSource] = useState('');
   const [selectedAssignedUser, setSelectedAssignedUser] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
 
@@ -176,6 +219,20 @@ const LeadDetailsPage: React.FC = () => {
     }));
 
     return [{ value: 'all', label: 'All Campaigns' }, ...campaigns];
+  }, [allLeads]);
+
+  const sourceOptions = useMemo(() => {
+    const sources = Array.from(new Set(
+      allLeads
+        .map(lead => lead.source)
+        .filter(Boolean)
+        .sort()
+    )).map(source => ({
+      value: source,
+      label: source
+    }));
+
+    return [{ value: 'all', label: 'All Sources' }, ...sources];
   }, [allLeads]);
 
   const assignedUserOptions = useMemo(() => {
@@ -225,8 +282,13 @@ const LeadDetailsPage: React.FC = () => {
       filtered = filtered.filter(lead => statusFilterFn(lead, selectedStatus));
     }
 
+    // Apply source filter
+    if (selectedSource && selectedSource !== 'all') {
+      filtered = filtered.filter(lead => sourceFilterFn(lead, selectedSource));
+    }
+
     setFilteredLeads(filtered);
-  }, [allLeads, globalFilter, selectedCampaign, selectedAssignedUser, selectedStatus]);
+  }, [allLeads, globalFilter, selectedCampaign, selectedAssignedUser, selectedStatus, selectedSource]);
 
   // Update current lead index when filtered leads or leadId changes
   useEffect(() => {
@@ -284,151 +346,13 @@ const LeadDetailsPage: React.FC = () => {
     }
   };
 
-  // Campaign Filter Combobox
-  const CampaignFilter = () => {
-    return (
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            className="w-full sm:w-[300px] justify-between"
-          >
-            {selectedCampaign
-              ? campaignOptions.find((campaign) => campaign.value === selectedCampaign)?.label
-              : "All Campaigns"}
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-full sm:w-[300px] p-0">
-          <Command>
-            <CommandInput placeholder="Search campaign..." />
-            <CommandList>
-              <CommandEmpty>No campaign found.</CommandEmpty>
-              <CommandGroup>
-                {campaignOptions.map((campaign) => (
-                  <CommandItem
-                    key={campaign.value}
-                    value={campaign.value}
-                    onSelect={(currentValue) => {
-                      setSelectedCampaign(currentValue === selectedCampaign ? "" : currentValue);
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        selectedCampaign === campaign.value ? "opacity-100" : "opacity-0"
-                      )}
-                    />
-                    {campaign.label}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-    );
-  };
 
-  // Assigned User Filter Combobox
-  const AssignedUserFilter = () => {
-    return (
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            className="w-full sm:w-[180px] justify-between"
-          >
-            {selectedAssignedUser
-              ? assignedUserOptions.find((user) => user.value === selectedAssignedUser)?.label
-              : "All Users"}
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-full sm:w-[180px] p-0">
-          <Command>
-            <CommandInput placeholder="Search user..." />
-            <CommandList>
-              <CommandEmpty>No user found.</CommandEmpty>
-              <CommandGroup>
-                {assignedUserOptions.map((user) => (
-                  <CommandItem
-                    key={user.value}
-                    value={user.value}
-                    onSelect={(currentValue) => {
-                      setSelectedAssignedUser(currentValue === selectedAssignedUser ? "" : currentValue);
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        selectedAssignedUser === user.value ? "opacity-100" : "opacity-0"
-                      )}
-                    />
-                    {user.label}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-    );
-  };
-
-  // Status Filter
-  const StatusFilter = () => {
-    return (
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            className="w-full sm:w-[150px] justify-between"
-          >
-            {selectedStatus
-              ? statusOptions.find((status) => status.value === selectedStatus)?.label
-              : "All Status"}
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-full sm:w-[150px] p-0">
-          <Command>
-            <CommandInput placeholder="Search status..." />
-            <CommandList>
-              <CommandEmpty>No status found.</CommandEmpty>
-              <CommandGroup>
-                {statusOptions.map((status) => (
-                  <CommandItem
-                    key={status.value}
-                    value={status.value}
-                    onSelect={(currentValue) => {
-                      setSelectedStatus(currentValue);
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 h-4 w-4",
-                        selectedStatus === status.value ? "opacity-100" : "opacity-0"
-                      )}
-                    />
-                    {status.label}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-    );
-  };
 
   // Clear all filters
   const clearAllFilters = () => {
     setGlobalFilter('');
     setSelectedCampaign('');
+    setSelectedSource('');
     setSelectedAssignedUser('');
     setSelectedStatus('all');
   };
@@ -625,20 +549,7 @@ const LeadDetailsPage: React.FC = () => {
   };
 
   const getStatusColor = (status: Lead['status']) => {
-    const colors = {
-      new: 'bg-blue-100 text-blue-800',
-      Contacted: 'bg-purple-100 text-purple-800',
-      qualified: 'bg-green-100 text-green-800',
-      followup: 'bg-yellow-100 text-yellow-800',
-      negotiation: 'bg-orange-100 text-orange-800',
-      won: 'bg-emerald-100 text-emerald-800',
-      lost: 'bg-red-100 text-red-800',
-      'Not Interested': 'bg-red-100 text-red-800',
-      'Call Back': 'bg-orange-100 text-orange-800',
-      'Switch off': 'bg-red-100 text-red-800',
-      'RNR': 'bg-indigo-100 text-indigo-800'
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800';
+    return getSharedStatusColor(status);
   };
 
   const getActivityIcon = (type: string) => {
@@ -710,6 +621,7 @@ const LeadDetailsPage: React.FC = () => {
             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(lead.status)}`}>
               {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
             </span>
+            {lead.createdAt && <LeadTimer createdAt={lead.createdAt} />}
           </div>
 
           {/* RIGHT — Filters + Navigation (Merged) */}
@@ -717,9 +629,38 @@ const LeadDetailsPage: React.FC = () => {
 
             {/* Filters */}
             <div className="flex flex-row gap-3 items-center">
-              <CampaignFilter />
-              <AssignedUserFilter />
-              <StatusFilter />
+              <CampaignFilter
+                value={selectedCampaign}
+                onChange={setSelectedCampaign}
+                options={campaignOptions}
+                placeholder="All Campaigns"
+                width="w-full sm:w-[300px]"
+              />
+              <AssignedUserFilter
+                value={selectedAssignedUser}
+                onChange={setSelectedAssignedUser}
+                options={assignedUserOptions}
+                placeholder="All Users"
+                width="w-full sm:w-[180px]"
+              />
+              <SourceFilter
+                value={selectedSource}
+                onChange={setSelectedSource}
+                options={sourceOptions}
+                placeholder="All Sources"
+                searchPlaceholder="Search source..."
+                emptyMessage="No source found."
+                width="w-full sm:w-[180px]"
+              />
+              <SourceFilter
+                value={selectedStatus}
+                onChange={setSelectedStatus}
+                options={[{ value: 'all', label: 'All Status' }, ...statusOptions]}
+                placeholder="All Status"
+                searchPlaceholder="Search status..."
+                emptyMessage="No status found."
+                width="w-full sm:w-[150px]"
+              />
 
               {(globalFilter || selectedCampaign || selectedAssignedUser || selectedStatus !== 'all') && (
                 <Button
