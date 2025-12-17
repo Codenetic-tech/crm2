@@ -168,7 +168,7 @@ const RMWiseReport: React.FC<RMWiseReportProps> = ({ leads }) => {
                                 <TableHead className="font-semibold text-slate-700 text-center">Total Leads</TableHead>
                                 <TableHead className="font-semibold text-blue-600 text-center">New</TableHead>
                                 <TableHead className="font-semibold text-purple-600 text-center">Follow Up</TableHead>
-                                <TableHead className="font-semibold text-emerald-700 text-center">Won</TableHead>
+                                <TableHead className="font-semibold text-emerald-700 text-center">Converted</TableHead>
                                 <TableHead className="font-semibold text-red-600 text-center">Not Interested</TableHead>
                                 <TableHead className="font-semibold text-orange-600 text-center">RNR</TableHead>
                                 <TableHead className="font-semibold text-yellow-600 text-center">Call Back</TableHead>

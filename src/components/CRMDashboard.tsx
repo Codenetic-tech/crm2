@@ -108,6 +108,7 @@ const globalFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string) => {
     lead.source?.toLowerCase().includes(search) ||
     lead.campaign?.toLowerCase().includes(search) ||
     lead.status?.toLowerCase().includes(search) ||
+    lead.id.toLowerCase().includes(search) ||
     false
   );
 };

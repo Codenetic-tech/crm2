@@ -16,7 +16,7 @@ import {
 import { Lead } from '@/utils/crm';
 import { DashboardTable } from '@/components/DashboardTable';
 import { SummaryCard } from '@/components/SummaryCard';
-import { CampaignFilter, SourceFilter, AssignedUserFilter, statusOptions } from '@/components/Filters';
+import { CampaignFilter, SourceFilter, AssignedUserFilter, statusOptions, getStatusColor } from '@/components/Filters';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Filter, PhoneIcon, ChevronDown, ArrowUpDown, Building2 } from 'lucide-react';
@@ -53,6 +53,12 @@ const campaignFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string) =>
     if (!filterValue || filterValue === 'all') return true;
     const campaign = row.original.campaign || '';
     return campaign.toLowerCase().includes(filterValue.toLowerCase());
+};
+
+const sourceFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string) => {
+    if (!filterValue || filterValue === 'all') return true;
+    const source = row.original.source || '';
+    return source.toLowerCase().includes(filterValue.toLowerCase());
 };
 
 const assignedUserFilterFn: FilterFn<Lead> = (row, columnId, filterValue: string) => {
@@ -115,7 +121,7 @@ export default function KYCStage() {
             header: ({ column }) => (
                 <Button variant="ghost" className="-ml-4 h-8 data-[state=open]:bg-accent"
                     onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
-                    Lead Name <ArrowUpDown className="ml-2 h-4 w-4" />
+                    <span className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50">Lead Name</span> <ArrowUpDown className="ml-2 h-4 w-4" />
                 </Button>
             ),
             cell: ({ row }) => {
@@ -134,8 +140,20 @@ export default function KYCStage() {
             }
         },
         {
+            accessorKey: "source",
+            header: () => <span className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50">Source</span>,
+            filterFn: sourceFilterFn,
+            cell: ({ row }) => <span className="text-sm text-gray-600">{row.getValue("source") || '-'}</span>
+        },
+        {
+            accessorKey: "campaign",
+            header: () => <span className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50">Campaign</span>,
+            filterFn: campaignFilterFn,
+            cell: ({ row }) => <span className="text-sm text-gray-600">{row.getValue("campaign") || '-'}</span>
+        },
+        {
             accessorKey: "phone",
-            header: "Mobile",
+            header: () => <span className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50">Mobile</span>,
             cell: ({ row }) => (
                 <div className="flex items-center gap-2 text-sm text-gray-700">
                     <PhoneIcon size={14} className="text-gray-400" />
@@ -145,7 +163,7 @@ export default function KYCStage() {
         },
         {
             accessorKey: "kyc_stage",
-            header: "KYC Stage",
+            header: () => <span className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50">KYC Stage</span>,
             cell: ({ row }) => (
                 <div className="text-sm font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded inline-block">
                     {row.getValue("kyc_stage") || 'N/A'}
@@ -153,8 +171,21 @@ export default function KYCStage() {
             )
         },
         {
+            accessorKey: "status",
+            header: () => <span className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50">Lead Status</span>,
+            filterFn: campaignFilterFn,
+            cell: ({ row }) => {
+                const status = row.getValue("status") as Lead['status'];
+                return (
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
+                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </span>
+                )
+            },
+        },
+        {
             accessorKey: "application",
-            header: "Application No",
+            header: () => <span className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50">Application No</span>,
             cell: ({ row }) => (
                 <div className="text-sm text-gray-700 font-mono">
                     {row.getValue("application") || 'N/A'}
@@ -163,7 +194,7 @@ export default function KYCStage() {
         },
         {
             accessorKey: "application_status",
-            header: "Application Status",
+            header: () => <span className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50">Application Status</span>,
             cell: ({ row }) => {
                 const status = (row.getValue("application_status") as string || 'Pending').toLowerCase();
                 let colorClass = 'bg-gray-100 text-gray-800';
@@ -180,7 +211,7 @@ export default function KYCStage() {
         },
         {
             accessorKey: "application_created_date",
-            header: "Created Date",
+            header: () => <span className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50">Created Date</span>,
             cell: ({ row }) => {
                 const dateVal = row.getValue("application_created_date") as string;
                 if (!dateVal) return <span className="text-gray-400">-</span>;
@@ -193,14 +224,8 @@ export default function KYCStage() {
             }
         },
         {
-            accessorKey: "campaign",
-            header: "Campaign",
-            filterFn: campaignFilterFn,
-            cell: ({ row }) => <span className="text-sm text-gray-600">{row.getValue("campaign") || '-'}</span>
-        },
-        {
             accessorKey: "_assign",
-            header: "Assigned To",
+            header: () => <span className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50">Assigned To</span>,
             filterFn: assignedUserFilterFn,
             cell: ({ row }) => {
                 const assignData = row.getValue("_assign") as string;
@@ -256,6 +281,10 @@ export default function KYCStage() {
     }, [selectedCampaign, table]);
 
     useEffect(() => {
+        table.getColumn('source')?.setFilterValue(selectedSource !== 'all' ? selectedSource : '');
+    }, [selectedSource, table]);
+
+    useEffect(() => {
         table.getColumn('_assign')?.setFilterValue(selectedAssignedUser !== 'all' ? selectedAssignedUser : '');
     }, [selectedAssignedUser, table]);
 
@@ -264,6 +293,11 @@ export default function KYCStage() {
     const campaignOptions = useMemo(() => {
         const campaigns = Array.from(new Set(kycLeads.map(l => l.campaign).filter(Boolean))).sort().map(c => ({ value: c, label: c }));
         return [{ value: 'all', label: 'All Campaigns' }, ...campaigns];
+    }, [kycLeads]);
+
+    const sourceOptions = useMemo(() => {
+        const sources = Array.from(new Set(kycLeads.map(l => l.source).filter(Boolean))).sort().map(s => ({ value: s, label: s }));
+        return [{ value: 'all', label: 'All Sources' }, ...sources];
     }, [kycLeads]);
 
     const assignedUserOptions = useMemo(() => {
@@ -301,6 +335,7 @@ export default function KYCStage() {
                                 className="w-full pl-10 pr-4 py-3"
                             />
                         </div>
+                        <SourceFilter value={selectedSource} onChange={setSelectedSource} options={sourceOptions} />
                         <CampaignFilter value={selectedCampaign} onChange={setSelectedCampaign} options={campaignOptions} />
                         <AssignedUserFilter value={selectedAssignedUser} onChange={setSelectedAssignedUser} options={assignedUserOptions} />
 

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Search, User, LogOut, Settings, Bell, AlarmClockCheck, Ticket, TicketIcon, AlarmClockCheckIcon } from 'lucide-react';
+import Notification from './Notification';
 import { toast } from '@/hooks/use-toast';
 import { CheckTreePicker } from 'rsuite';
 import { DateRangePicker } from 'rsuite';
@@ -32,13 +33,13 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ hierarchyTreeData }) => {
   const { user, logout } = useAuth();
-  const { 
-    selectedHierarchy, 
-    setSelectedHierarchy, 
-    dateRange, 
-    setDateRange 
+  const {
+    selectedHierarchy,
+    setSelectedHierarchy,
+    dateRange,
+    setDateRange
   } = useFilter();
-  
+
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleLogout = () => {
@@ -64,7 +65,7 @@ const Header: React.FC<HeaderProps> = ({ hierarchyTreeData }) => {
   const handleDateChange = (value: [Date, Date] | null) => {
     if (value) {
       const [start, end] = value;
-      
+
       // Format date to avoid timezone issues
       const formatDateForState = (date: Date) => {
         const year = date.getFullYear();
@@ -81,7 +82,7 @@ const Header: React.FC<HeaderProps> = ({ hierarchyTreeData }) => {
   };
 
   // Convert string dates to Date objects for DateRangePicker
-  const pickerValue = dateRange.start && dateRange.end 
+  const pickerValue = dateRange.start && dateRange.end
     ? [new Date(dateRange.start), new Date(dateRange.end)] as [Date, Date]
     : null;
 
@@ -150,7 +151,7 @@ const Header: React.FC<HeaderProps> = ({ hierarchyTreeData }) => {
 
 
       <div className="flex items-center space-x-4">
-                {/* Date Range Picker */}
+        {/* Date Range Picker */}
         <div className="flex items-center gap-2">
           <div className="bg-white border border-slate-200 rounded-lg">
             <DateRangePicker
@@ -205,37 +206,29 @@ const Header: React.FC<HeaderProps> = ({ hierarchyTreeData }) => {
           />
         </form> */}
 
-         {/* Icons Container */}
-          <div className="flex items-center gap-3 border-l border-gray-200 pl-4">
-            {/* Profile Icon */}
-            <button className="relative p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 group">
-              <AlarmClockCheckIcon size={20} />
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
-              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-4 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
-                Task
-              </div>
-            </button>
+        {/* Icons Container */}
+        <div className="flex items-center gap-3 border-l border-gray-200 pl-4">
+          {/* Profile Icon */}
+          <button className="relative p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 group">
+            <AlarmClockCheckIcon size={20} />
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-4 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
+              Task
+            </div>
+          </button>
 
-            {/* GitHub Icon */}
-            <button className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200 group">
-              <TicketIcon size={20} />
-              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-4 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
-                Tickets
-              </div>
-            </button>
+          {/* GitHub Icon */}
+          <button className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200 group">
+            <TicketIcon size={20} />
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-4 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
+              Tickets
+            </div>
+          </button>
 
-            {/* Notification Icon */}
-            <button className="relative p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 group">
-              <Bell size={20} />
-              <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center border-2 border-white">
-                3
-              </div>
-              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-4 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
-                Notifications
-              </div>
-            </button>
+          {/* Notification Icon */}
+          <Notification />
 
-          </div>
+        </div>
 
         {/* User Dropdown */}
         <DropdownMenu>

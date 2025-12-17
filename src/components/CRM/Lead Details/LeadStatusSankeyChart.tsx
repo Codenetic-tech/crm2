@@ -6,47 +6,90 @@ interface LeadStatusSankeyChartProps {
     leads: Lead[];
 }
 
+function MyCustomSankeyNode({ x, y, width, height, index, payload, containerWidth }: any) {
+    const isOut = listIsOut(x, width, containerWidth);
+
+    return (
+        <Layer key={`CustomNode${index}`}>
+            <Rectangle x={x} y={y} width={width} height={height} fill="#2f00ffff" fillOpacity="1" />
+            <text
+                textAnchor={isOut ? 'end' : 'start'}
+                x={isOut ? x - 6 : x + width + 6}
+                y={y + height / 2}
+                fontSize="14"
+                stroke="#333"
+            >
+                {`${payload.name} (${payload.value})`}
+            </text>
+        </Layer>
+    );
+}
+
+function listIsOut(x: number, width: number, containerWidth: number) {
+    if (containerWidth == null) return false;
+    return x + width + 6 > containerWidth;
+}
+
 const LeadStatusSankeyChart: React.FC<LeadStatusSankeyChartProps> = ({ leads }) => {
     const data = useMemo(() => {
         if (!leads || leads.length === 0) {
             return { nodes: [], links: [] };
         }
 
-        const sources = new Set<string>();
-        const statuses = new Set<string>();
-        const linksMap = new Map<string, number>();
+        const sourcesMap = new Map<string, number>();
+        const sourceStatusMap = new Map<string, number>();
+        const uniqueStatuses = new Set<string>();
 
         leads.forEach((lead) => {
             const source = lead.source || 'Unknown Source';
             const status = lead.status ? (lead.status.charAt(0).toUpperCase() + lead.status.slice(1)) : 'Unknown Status';
 
-            sources.add(source);
-            statuses.add(status);
+            // Count for Total -> Source
+            sourcesMap.set(source, (sourcesMap.get(source) || 0) + 1);
 
+            // Count for Source -> Status
             const key = `${source}|${status}`;
-            linksMap.set(key, (linksMap.get(key) || 0) + 1);
+            sourceStatusMap.set(key, (sourceStatusMap.get(key) || 0) + 1);
+
+            uniqueStatuses.add(status);
         });
 
-        const sourceArray = Array.from(sources).sort();
-        const statusArray = Array.from(statuses).sort();
+        const sortedSources = Array.from(sourcesMap.keys()).sort();
+        const sortedStatuses = Array.from(uniqueStatuses).sort();
 
+        // Construct Nodes: [Total Leads, ...Sources, ...Statuses]
         const nodes = [
-            ...sourceArray.map((name) => ({ name })),
-            ...statusArray.map((name) => ({ name })),
+            { name: "Total Leads" },
+            ...sortedSources.map((name) => ({ name })),
+            ...sortedStatuses.map((name) => ({ name })),
         ];
 
         const links = [];
-        for (const [key, value] of linksMap.entries()) {
+
+        // level 0: Total Leads -> Sources
+        const totalLeadsIndex = 0;
+        sortedSources.forEach((source, idx) => {
+            const sourceIndex = idx + 1; // 1-based index for sources
+            links.push({
+                source: totalLeadsIndex,
+                target: sourceIndex,
+                value: sourcesMap.get(source) || 0,
+            });
+        });
+
+        // level 1: Sources -> Statuses
+        // We iterate map to create links
+        sourceStatusMap.forEach((value, key) => {
             const [sourceName, statusName] = key.split('|');
-            const sourceIndex = sourceArray.indexOf(sourceName);
-            const statusIndex = statusArray.indexOf(statusName) + sourceArray.length;
+            const sourceIndex = sortedSources.indexOf(sourceName) + 1;
+            const statusIndex = sortedStatuses.indexOf(statusName) + 1 + sortedSources.length;
 
             links.push({
                 source: sourceIndex,
                 target: statusIndex,
-                value,
+                value: value,
             });
-        }
+        });
 
         return { nodes, links };
     }, [leads]);
@@ -58,46 +101,6 @@ const LeadStatusSankeyChart: React.FC<LeadStatusSankeyChartProps> = ({ leads }) 
             </div>
         );
     }
-
-    // Custom Node Component
-    const renderNode = (props: any) => {
-        const { x, y, width, height, index, payload, containerWidth } = props;
-        const isOut = x + width + 6 > containerWidth;
-
-        return (
-            <Layer key={`node-${index}`}>
-                <Rectangle
-                    x={x}
-                    y={y}
-                    width={width}
-                    height={height}
-                    fill="#8884d8"
-                    fillOpacity="1"
-                />
-                <text
-                    textAnchor={isOut ? 'end' : 'start'}
-                    x={isOut ? x - 6 : x + width + 6}
-                    y={y + height / 2}
-                    fontSize="14"
-                    fill="#374151"
-                    fontWeight="600"
-                    dy={4}
-                >
-                    {payload.name}
-                </text>
-                <text
-                    textAnchor={isOut ? 'end' : 'start'}
-                    x={isOut ? x - 6 : x + width + 6}
-                    y={y + height / 2 + 16}
-                    fontSize="12"
-                    fill="#9ca3af"
-                    dy={4}
-                >
-                    {payload.value} leads
-                </text>
-            </Layer>
-        );
-    };
 
     return (
         <div className="bg-white rounded-2xl shadow-xl shadow-blue-50 p-6 border border-gray-100 hover:shadow-2xl hover:shadow-blue-100 transition-all duration-300">
@@ -112,38 +115,18 @@ const LeadStatusSankeyChart: React.FC<LeadStatusSankeyChartProps> = ({ leads }) 
                 <ResponsiveContainer width="100%" height="100%">
                     <Sankey
                         data={data}
-                        node={renderNode}
-                        nodePadding={50}
-                        nodeWidth={16}
+                        node={MyCustomSankeyNode}
+                        nodePadding={30}
+                        nodeWidth={10}
                         margin={{
                             left: 20,
                             right: 150,
                             top: 20,
                             bottom: 20,
                         }}
-                        link={{ stroke: '#3b82f6', strokeOpacity: 0.3, strokeWidth: 2 }}
+                        link={{ stroke: '#272af7ff' }}
                     >
-                        <Tooltip
-                            contentStyle={{
-                                backgroundColor: '#09090b',
-                                border: 'none',
-                                borderRadius: '0.5rem',
-                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
-                                padding: '0.75rem',
-                                color: '#ffffff'
-                            }}
-                            itemStyle={{
-                                color: '#ffffff',
-                                fontSize: '0.875rem',
-                                fontWeight: '500'
-                            }}
-                            labelStyle={{
-                                color: '#ffffff',
-                                fontSize: '0.875rem',
-                                fontWeight: '600',
-                                marginBottom: '0.25rem'
-                            }}
-                        />
+                        <Tooltip />
                     </Sankey>
                 </ResponsiveContainer>
             </div>
