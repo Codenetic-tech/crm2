@@ -5,9 +5,15 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
-import { Bell, CheckCheck, RefreshCw } from 'lucide-react';
+import { Bell, CheckCheck, RefreshCw, Filter } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { formatDistanceToNow } from 'date-fns';
 
 interface NotificationUser {
@@ -36,6 +42,7 @@ const NotificationSystem: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
     const [isMarkingRead, setIsMarkingRead] = useState(false);
+    const [selectedType, setSelectedType] = useState<string>('all');
 
     // Track previous unread count to trigger sound
     const lastUnreadCount = useRef<number>(0);
@@ -101,7 +108,10 @@ const NotificationSystem: React.FC = () => {
 
             let newNotifications: NotificationItem[] = [];
             if (data.message?.data && Array.isArray(data.message.data)) {
-                newNotifications = data.message.data;
+                newNotifications = data.message.data.filter((n: NotificationItem) => {
+                    // Filter out "removed by Administrator" notifications
+                    return !/removed by\s*<span[^>]*>\s*Administrator\s*<\/span>/i.test(n.notification_text);
+                });
             }
 
             setNotifications(newNotifications);
@@ -166,7 +176,7 @@ const NotificationSystem: React.FC = () => {
         requestNotificationPermission();
         fetchNotifications();
 
-        const intervalId = setInterval(fetchNotifications, 60000);
+        const intervalId = setInterval(fetchNotifications, 300000);
         return () => clearInterval(intervalId);
     }, [employee]);
 
@@ -177,6 +187,15 @@ const NotificationSystem: React.FC = () => {
     }, [isOpen]);
 
     const unreadCount = notifications.filter((n) => n.read === 0).length;
+
+    // Get unique types
+    const uniqueTypes = Array.from(new Set(notifications.map(n => n.type).filter(Boolean)));
+
+    // Filter notifications
+    const filteredNotifications = notifications.filter(n => {
+        if (selectedType === 'all') return true;
+        return n.type === selectedType;
+    });
 
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -194,6 +213,28 @@ const NotificationSystem: React.FC = () => {
                 <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-10">
                     <h4 className="font-semibold text-gray-900 text-sm">Notifications</h4>
                     <div className="flex gap-2">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className={`h-6 w-6 ${selectedType !== 'all' ? 'text-blue-600' : 'text-gray-500'} hover:text-blue-600`}
+                                >
+                                    <Filter className="h-3 w-3" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setSelectedType('all')}>
+                                    All
+                                </DropdownMenuItem>
+                                {uniqueTypes.map(type => (
+                                    <DropdownMenuItem key={type} onClick={() => setSelectedType(type)}>
+                                        {type}
+                                    </DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+
                         <Button
                             variant="ghost"
                             size="icon"
@@ -220,13 +261,13 @@ const NotificationSystem: React.FC = () => {
                 </div>
 
                 <ScrollArea className="h-[400px]">
-                    {notifications.length === 0 && !loading ? (
+                    {filteredNotifications.length === 0 && !loading ? (
                         <div className="p-8 text-center text-gray-500 text-sm">
                             No notifications
                         </div>
                     ) : (
                         <div className="divide-y divide-gray-100">
-                            {notifications.map((notification, index) => (
+                            {filteredNotifications.map((notification, index) => (
                                 <div key={`${notification.creation}-${index}`} className={`p-4 hover:bg-slate-50 transition-colors ${notification.read === 0 ? 'bg-blue-50/30' : ''}`}>
                                     <div
                                         className="text-sm text-gray-800 mb-1 prose prose-sm max-w-none prose-p:my-0 prose-span:text-gray-900"
