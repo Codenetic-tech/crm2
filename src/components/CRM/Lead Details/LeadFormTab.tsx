@@ -1,5 +1,5 @@
 // components/CRM/LeadDetails/LeadFormTab.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Save,
   RefreshCw,
@@ -23,7 +23,9 @@ import {
   Briefcase,
   Smartphone,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Clock,
+  ArrowRight
 } from 'lucide-react';
 import { type Lead } from '@/utils/crm';
 import { updateCachedLeadDetails } from '@/utils/crmCache';
@@ -96,6 +98,8 @@ const dematAccountOptions = [
   '51_to_100',
   '100_plus'
 ];
+
+import { LeadTimer } from '@/components/LeadTimer';
 
 // Status colors for display
 const getStatusColor = (status: Lead['status']) => {
@@ -276,9 +280,22 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
               <span className="mx-1">•</span>
               <Phone className="w-3 h-3" />
               {lead.phone}
+              <button
+                onClick={() => {
+                  const event = new CustomEvent('trigger-kyc-search', {
+                    detail: { clientCode: lead.phone }
+                  });
+                  window.dispatchEvent(event);
+                }}
+                className="ml-2 p-1 hover:bg-purple-100 rounded-full transition-colors group"
+                title="Search in KYC Tracker"
+              >
+                <ArrowRight className="w-3 h-3 text-purple-600 group-hover:translate-x-0.5 transition-transform" />
+              </button>
               <Badge variant="outline" className="px-3 py-1">
                 {lead.industry}
               </Badge>
+              {lead.createdAt && <LeadTimer createdAt={lead.createdAt} />}
             </div>
           </div>
         </div>

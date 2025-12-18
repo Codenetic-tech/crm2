@@ -15,6 +15,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Search, User, LogOut, Settings, Bell, AlarmClockCheck, Ticket, TicketIcon, AlarmClockCheckIcon } from 'lucide-react';
 import Notification from './Notification';
+import { KYCTracker } from './KYCTracker';
 import { toast } from '@/hooks/use-toast';
 import { CheckTreePicker } from 'rsuite';
 import { DateRangePicker } from 'rsuite';
@@ -151,6 +152,12 @@ const Header: React.FC<HeaderProps> = ({ hierarchyTreeData }) => {
 
 
       <div className="flex items-center space-x-4">
+
+        {/* KYC Tracker */}
+        <div className="relative">
+          <KYCTracker />
+        </div>
+
         {/* Date Range Picker */}
         <div className="flex items-center gap-2">
           <div className="bg-white border border-slate-200 rounded-lg">

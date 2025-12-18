@@ -12,9 +12,10 @@ import {
 import { getLeadById, type Lead, fetchLeads } from '@/utils/crm';
 import { getCachedLeadDetails, getCachedComments, saveCommentsToCache, type Comment } from '@/utils/crmCache';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLeads } from '@/contexts/LeadContext';
 import LeadTasksTab from '@/components/CRM/Lead Details/LeadTasksTab';
 import LeadFormTab from '@/components/CRM/Lead Details/LeadFormTab';
-import { CampaignFilter, AssignedUserFilter, SourceFilter, statusOptions, getStatusColor as getSharedStatusColor } from '@/components/Filters';
+import { CampaignFilter, AssignedUserFilter, SourceFilter, getStatusColor as getSharedStatusColor } from '@/components/Filters';
 
 // Import combobox components
 import {
@@ -107,74 +108,23 @@ const mockWhatsAppMessages = [
   { id: 5, text: 'Tuesday works for me. I\'ll send over a calendar invite shortly.', time: '10:36 AM', sent: true }
 ];
 
-const LeadTimer: React.FC<{ createdAt: string }> = ({ createdAt }) => {
-  const [timeRemaining, setTimeRemaining] = useState('');
-  const [isExpired, setIsExpired] = useState(false);
-
-  useEffect(() => {
-    const updateTimer = () => {
-      const createdDate = new Date(createdAt);
-      const expirationDate = new Date(createdDate.getTime() + (45 * 24 * 60 * 60 * 1000)); // 45 days validity
-      const now = new Date().getTime();
-      const diff = expirationDate.getTime() - now;
-
-      if (diff <= 0) {
-        setIsExpired(true);
-        setTimeRemaining('Expired');
-        return;
-      }
-
-      setIsExpired(false);
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      // const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)); // Optional: detail level
-
-      const parts = [];
-      if (days > 0) parts.push(`${days}d`);
-      parts.push(`${hours}h`);
-
-      setTimeRemaining(`${parts.join(' ')} remaining`);
-    };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 60000); // Update every minute
-
-    return () => clearInterval(interval);
-  }, [createdAt]);
-
-  return (
-    <div
-      className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${isExpired
-        ? 'bg-red-50 text-red-600 border-red-200'
-        : 'bg-emerald-50 text-emerald-600 border-emerald-200'
-        }`}
-      title="Time remaining to convert (45 days validity)"
-    >
-      <Clock size={12} className={isExpired ? "text-red-500" : "text-emerald-500"} />
-      <span>{timeRemaining}</span>
-    </div>
-  );
-};
 
 const LeadDetailsPage: React.FC = () => {
   const { user } = useAuth();
+  const { leads: contextLeads, isLoading: contextLoading, updateLead: updateLeadInContext } = useLeads();
   const { leadId } = useParams<{ leadId: string }>();
   const navigate = useNavigate();
   const [lead, setLead] = useState<Lead | null>(null);
   const [activeTab, setActiveTab] = useState('form');
-  const [loading, setLoading] = useState(true);
   const [newMessage, setNewMessage] = useState('');
   const [messages, setMessages] = useState(mockWhatsAppMessages);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // New states for comments
-  const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
-  const [commentsLoading, setCommentsLoading] = useState(false);
   const [postingComment, setPostingComment] = useState(false);
 
   // New states for navigation between leads
-  const [allLeads, setAllLeads] = useState<Lead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
   const [currentLeadIndex, setCurrentLeadIndex] = useState(-1);
 
@@ -197,6 +147,19 @@ const LeadDetailsPage: React.FC = () => {
     { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle }
   ];
 
+  // Local status options for this page only (different from global statusOptions in Filters.tsx)
+  const statusOptions = [
+    { value: 'new', label: 'New' },
+    { value: 'followup', label: 'Followup' },
+    { value: 'Not Interested', label: 'Not Interested' },
+    { value: 'Call Back', label: 'Call Back' },
+    { value: 'Switch off', label: 'Switch off' },
+    { value: 'RNR', label: 'RNR' },
+    { value: 'won', label: 'Won' },
+    { value: 'client', label: 'Client' }
+  ];
+
+
   // Helper function to get display name from email
   const getDisplayName = (email: string) => {
     if (email === 'all') return 'All Users';
@@ -205,6 +168,20 @@ const LeadDetailsPage: React.FC = () => {
       part.charAt(0).toUpperCase() + part.slice(1)
     ).join(' ');
   };
+
+  // Get all leads from context and filter by status
+  const allLeads = useMemo(() => {
+    // Filter to only include statuses that are in our custom statusOptions
+    const filtered = contextLeads.filter(lead =>
+      ['new', 'followup', 'Not Interested', 'Call Back', 'Switch off', 'RNR', 'won', 'client'].includes(lead.status)
+    );
+    // Sort by creation date (newest first) like in dashboard
+    return filtered.sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime();
+      const timeB = new Date(b.createdAt).getTime();
+      return timeB - timeA;
+    });
+  }, [contextLeads]);
 
   // Get unique campaigns and assigned users
   const campaignOptions = useMemo(() => {
@@ -305,27 +282,6 @@ const LeadDetailsPage: React.FC = () => {
     setLead(updatedLead);
   };
 
-  // Function to fetch all leads for navigation
-  const fetchAllLeadsForNavigation = async () => {
-    try {
-      const leads = await fetchLeads(employeeId, email, user.team);
-      // Filter to only include relevant statuses like in the dashboard
-      const filteredLeads = leads.filter(lead =>
-        ['new', 'Contacted', 'qualified', 'followup', 'Not Interested', 'Call Back', 'Switch off', 'RNR'].includes(lead.status)
-      );
-      // Sort by creation date (newest first) like in dashboard
-      const sortedLeads = filteredLeads.sort((a, b) => {
-        const timeA = new Date(a.createdAt).getTime();
-        const timeB = new Date(b.createdAt).getTime();
-        return timeB - timeA;
-      });
-
-      setAllLeads(sortedLeads);
-    } catch (error) {
-      console.error('Error fetching leads for navigation:', error);
-    }
-  };
-
   // Function to navigate to previous lead
   const goToPreviousLead = () => {
     if (currentLeadIndex > 0) {
@@ -357,56 +313,46 @@ const LeadDetailsPage: React.FC = () => {
     setSelectedStatus('all');
   };
 
-  // Function to fetch comments
-  const fetchComments = async () => {
-    if (!leadId) return;
+  // Parse comments from lead object (instant, no fetching needed)
+  const comments = useMemo(() => {
+    if (!lead || !lead._comments) return [];
 
-    setCommentsLoading(true);
     try {
-      // Check cache first
-      const cachedComments = await getCachedComments(leadId);
-      if (cachedComments) {
-        setComments(cachedComments);
-        setCommentsLoading(false);
-        return;
-      }
+      const parsedComments = JSON.parse(lead._comments) as Array<{
+        comment: string;
+        by: string;
+        name: string;
+      }>;
 
-      // Fetch from API if not in cache
-      const response = await fetch('https://n8n.gopocket.in/webhook/hrms', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          source: 'getcomments',
-          employeeId: employeeId,
-          email: email,
-          leadid: leadId
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch comments: ${response.status}`);
-      }
-
-      const allComments: Comment[] = await response.json();
-
-      // Filter comments for this specific lead
-      const leadComments = allComments.filter(comment =>
-        comment.reference_name === leadId
-      );
-
-      // Sort by creation date (newest first)
-      leadComments.sort((a, b) => new Date(b.creation).getTime() - new Date(a.creation).getTime());
-
-      setComments(leadComments);
-      await saveCommentsToCache(leadId, leadComments);
+      // Convert the simple comment format to the Comment interface format
+      // Sort by name (which appears to be a timestamp-based ID) in reverse order
+      return parsedComments
+        .map((c, index) => ({
+          name: c.name,
+          owner: c.by,
+          creation: new Date().toISOString(), // We don't have exact timestamp, use current
+          modified: new Date().toISOString(),
+          modified_by: c.by,
+          docstatus: 0,
+          idx: index,
+          comment_type: 'Comment',
+          comment_email: c.by,
+          subject: null,
+          comment_by: c.by,
+          published: 0,
+          seen: 0,
+          reference_doctype: 'Lead',
+          reference_name: lead.id,
+          reference_owner: null,
+          content: c.comment,
+          ip_address: null,
+        } as Comment))
+        .reverse(); // Newest first
     } catch (error) {
-      console.error('Error fetching comments:', error);
-    } finally {
-      setCommentsLoading(false);
+      console.error('Error parsing comments from lead:', error);
+      return [];
     }
-  };
+  }, [lead]);
 
   // Function to post a new comment
   const postComment = async () => {
@@ -432,14 +378,15 @@ const LeadDetailsPage: React.FC = () => {
         throw new Error(`Failed to post comment: ${response.status}`);
       }
 
-      const newCommentData: Comment[] = await response.json();
+      // Clear the input immediately for better UX
+      setNewComment('');
 
-      if (newCommentData && newCommentData.length > 0) {
-        // Add the new comment to the list and clear the input
-        const updatedComments = [newCommentData[0], ...comments];
-        setComments(updatedComments);
-        await saveCommentsToCache(leadId, updatedComments);
-        setNewComment('');
+      // Refetch the lead to get updated comments
+      const updatedLead = await getLeadById(leadId, employeeId, email, user.team);
+      if (updatedLead) {
+        setLead(updatedLead);
+        // Update the lead in context as well
+        await updateLeadInContext(updatedLead);
       }
     } catch (error) {
       console.error('Error posting comment:', error);
@@ -448,53 +395,40 @@ const LeadDetailsPage: React.FC = () => {
     }
   };
 
-  // Load lead data
+  // Get current lead from context leads (instant, no loading)
   useEffect(() => {
-    const loadLead = async () => {
-      setLoading(true);
-      try {
-        if (leadId) {
-          // First, check if we have the lead in the cache
-          const cachedLead = await getCachedLeadDetails(leadId);
-          if (cachedLead) {
-            setLead(cachedLead);
-            setLoading(false);
-            return;
+    if (leadId && allLeads.length > 0) {
+      const currentLead = allLeads.find(l => l.id === leadId);
+      if (currentLead) {
+        setLead(currentLead);
+      } else {
+        // Lead not found in context, might be a different status
+        // Fall back to fetching individually
+        const loadLead = async () => {
+          try {
+            const cachedLead = await getCachedLeadDetails(leadId);
+            if (cachedLead) {
+              setLead(cachedLead);
+              return;
+            }
+            const leadData = await getLeadById(leadId, employeeId, email, user.team);
+            setLead(leadData);
+          } catch (error) {
+            console.error('Error fetching lead:', error);
+            setLead(null);
           }
-
-          // If not in cache, then fetch from API (which will also update the cache)
-          const leadData = await getLeadById(leadId, employeeId, email, user.team);
-          setLead(leadData);
-        }
-      } catch (error) {
-        console.error('Error fetching lead:', error);
-        setLead(null);
-      } finally {
-        setLoading(false);
+        };
+        loadLead();
       }
-    };
-
-    loadLead();
-  }, [leadId, employeeId, email]);
-
-  // Load all leads for navigation when component mounts or lead changes
-  useEffect(() => {
-    if (employeeId && email) {
-      fetchAllLeadsForNavigation();
     }
-  }, [employeeId, email, leadId]);
+  }, [leadId, allLeads, employeeId, email, user.team]);
 
   // Scroll to bottom for WhatsApp messages
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  // Fetch comments when Comments tab becomes active
-  useEffect(() => {
-    if (activeTab === 'comment' && leadId) {
-      fetchComments();
-    }
-  }, [activeTab, leadId]);
+
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -562,7 +496,7 @@ const LeadDetailsPage: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (contextLoading && allLeads.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
         <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
@@ -621,7 +555,6 @@ const LeadDetailsPage: React.FC = () => {
             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(lead.status)}`}>
               {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
             </span>
-            {lead.createdAt && <LeadTimer createdAt={lead.createdAt} />}
           </div>
 
           {/* RIGHT — Filters + Navigation (Merged) */}
@@ -892,12 +825,7 @@ const LeadDetailsPage: React.FC = () => {
 
               {/* Comments List */}
               <div className="divide-y divide-gray-100">
-                {commentsLoading ? (
-                  <div className="p-8 text-center">
-                    <RefreshCw className="animate-spin h-8 w-8 text-blue-500 mx-auto mb-4" />
-                    <p className="text-gray-600">Loading comments...</p>
-                  </div>
-                ) : comments.length === 0 ? (
+                {comments.length === 0 ? (
                   <div className="p-8 text-center">
                     <MessageSquare className="mx-auto h-12 w-12 text-gray-300 mb-4" />
                     <p className="text-gray-500">No comments yet</p>
