@@ -592,28 +592,28 @@ const CRMDashboard: React.FC<CRMDashboardProps> = ({ hideHeader = false }) => {
         </div>
       ),
     },
-    // {
-    //   id: "validity",
-    //   header: ({ column }) => {
-    //     return (
-    //       <Button
-    //         variant="ghost"
-    //        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-    //        className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
-    //      >
-    //        Validity
-    //        <ArrowUpDown className="ml-2 h-4 w-4" />
-    //      </Button>
-    //    )
-    //  },
-    //  cell: ({ row }) => (
-    //    <div className="hidden lg:block">
-    //      {row.original.createdAt && (
-    //        <LeadTimer createdAt={row.original.createdAt} />
-    //      )}
-    //    </div>
-    //  ),
-    //},
+    {
+      id: "validity",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Validity
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="hidden lg:block">
+          {row.original.validityDate && (
+            <LeadTimer validityDate={row.original.validityDate} />
+          )}
+        </div>
+      ),
+    },
     {
       accessorKey: "status",
       header: ({ column }) => {

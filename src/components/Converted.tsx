@@ -453,6 +453,26 @@ const Converted: React.FC = () => {
       ),
     },
     {
+      accessorKey: "tradeDone",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="font-medium text-sm text-gray-900 hidden lg:flex hover:bg-gray-50"
+          >
+            Trade Done
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="text-sm text-gray-900 hidden lg:block font-normal">
+          {row.getValue("tradeDone") || 'N/A'}
+        </div>
+      ),
+    },
+    {
       accessorKey: "source",
       header: ({ column }) => {
         return (

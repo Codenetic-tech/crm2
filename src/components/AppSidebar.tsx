@@ -113,12 +113,12 @@ const allMenuItems = [
     roles: ['manager', 'employee', 'banking']
   },
   {
-    title: 'Settings',
-    url: '/settings',
-    icon: Settings,
-    color: 'text-slate-500',
-    bgColor: 'bg-slate-50',
-    roles: ['manager']
+    title: 'Updates',
+    url: '/updates',
+    icon: Sparkles,
+    color: 'text-indigo-600',
+    bgColor: 'bg-indigo-50',
+    roles: ['manager', 'employee']
   },
 ];
 

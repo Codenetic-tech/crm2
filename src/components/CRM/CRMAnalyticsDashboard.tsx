@@ -43,6 +43,8 @@ interface TreeDataNode {
   children?: TreeDataNode[];
 }
 
+const normalizeString = (str: string) => (str || '').toLowerCase().replace(/\s+/g, '');
+
 const CRMAnalyticsDashboard: React.FC = () => {
   const { user } = useAuth();
   const { leads, isLoading: isLeadsLoading, refreshLeads } = useLeads();
@@ -175,11 +177,20 @@ const CRMAnalyticsDashboard: React.FC = () => {
 
   // Fetching logic removed - controlled by LeadContext
 
-  // Get unique campaigns from leads
+  // Get unique campaigns from leads - Normalized to handle spaces/casing
   const campaigns = React.useMemo(() => {
     const safeLeads = Array.isArray(leads) ? leads : [];
-    const campaignSet = new Set(safeLeads.map(lead => lead.campaign || 'Uncategorized'));
-    const campaignList = Array.from(campaignSet).sort();
+    const normalizedMap = new Map<string, string>(); // normalized -> original display name
+
+    safeLeads.forEach(lead => {
+      const name = lead.campaign || 'Uncategorized';
+      const normalized = normalizeString(name);
+      if (!normalizedMap.has(normalized)) {
+        normalizedMap.set(normalized, name);
+      }
+    });
+
+    const campaignList = Array.from(normalizedMap.values()).sort();
     return ['all', ...campaignList];
   }, [leads]);
 
@@ -212,11 +223,20 @@ const CRMAnalyticsDashboard: React.FC = () => {
     return ['all', ...userList];
   }, [leads]);
 
-  // Get unique sources from leads
+  // Get unique sources from leads - Normalized to handle spaces/casing
   const sources = React.useMemo(() => {
     const safeLeads = Array.isArray(leads) ? leads : [];
-    const sourceSet = new Set(safeLeads.map(lead => lead.source || 'Unknown'));
-    const sourceList = Array.from(sourceSet).sort();
+    const normalizedMap = new Map<string, string>();
+
+    safeLeads.forEach(lead => {
+      const name = lead.source || 'Unknown';
+      const normalized = normalizeString(name);
+      if (!normalizedMap.has(normalized)) {
+        normalizedMap.set(normalized, name);
+      }
+    });
+
+    const sourceList = Array.from(normalizedMap.values()).sort();
     return ['all', ...sourceList];
   }, [leads]);
 
@@ -276,9 +296,12 @@ const CRMAnalyticsDashboard: React.FC = () => {
   const filteredLeads = React.useMemo(() => {
     let filtered = leads;
 
-    // Filter by campaign
+    // Filter by campaign - uses normalized comparison
     if (selectedCampaign !== 'all') {
-      filtered = filtered.filter(lead => lead.campaign === selectedCampaign);
+      const normalizedSelected = normalizeString(selectedCampaign);
+      filtered = filtered.filter(lead =>
+        normalizeString(lead.campaign || 'Uncategorized') === normalizedSelected
+      );
     }
 
     // Filter by assigned user
@@ -296,9 +319,12 @@ const CRMAnalyticsDashboard: React.FC = () => {
       });
     }
 
-    // Filter by source
+    // Filter by source - uses normalized comparison
     if (selectedSource !== 'all') {
-      filtered = filtered.filter(lead => lead.source === selectedSource);
+      const normalizedSelected = normalizeString(selectedSource);
+      filtered = filtered.filter(lead =>
+        normalizeString(lead.source || 'Unknown') === normalizedSelected
+      );
     }
 
     // Filter by hierarchy - use expanded email list
@@ -533,8 +559,8 @@ const CRMAnalyticsDashboard: React.FC = () => {
                         <CommandItem
                           key={campaign}
                           value={campaign}
-                          onSelect={(currentValue) => {
-                            setSelectedCampaign(currentValue === selectedCampaign ? "all" : currentValue);
+                          onSelect={() => {
+                            setSelectedCampaign(campaign === selectedCampaign ? "all" : campaign);
                             setCampaignOpen(false);
                           }}
                         >
@@ -578,8 +604,8 @@ const CRMAnalyticsDashboard: React.FC = () => {
                         <CommandItem
                           key={source}
                           value={source}
-                          onSelect={(currentValue) => {
-                            setSelectedSource(currentValue === selectedSource ? "all" : currentValue);
+                          onSelect={() => {
+                            setSelectedSource(source === selectedSource ? "all" : source);
                             setSourceOpen(false);
                           }}
                         >
@@ -1041,7 +1067,10 @@ const CRMAnalyticsDashboard: React.FC = () => {
 
           {/* Third Row: RM Wise Report */}
           <div className="mb-6">
-            <RMWiseReport leads={filteredLeads} />
+            <RMWiseReport
+              leads={filteredLeads}
+              teamMembers={user?.team ? JSON.parse(user.team) : []}
+            />
           </div>
         </>
       )}

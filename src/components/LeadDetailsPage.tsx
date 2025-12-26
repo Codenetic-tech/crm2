@@ -1,6 +1,6 @@
 // components/LeadDetailsPage.tsx
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Activity, CheckSquare, Mail, MessageCircle, FileText, MessageSquare,
   ChevronRight, Home, Building2, MailIcon, PhoneIcon,
@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLeads } from '@/contexts/LeadContext';
 import LeadTasksTab from '@/components/CRM/Lead Details/LeadTasksTab';
 import LeadFormTab from '@/components/CRM/Lead Details/LeadFormTab';
+import WhatsAppTab from '@/components/CRM/Lead Details/WhatsAppTab';
 import { CampaignFilter, AssignedUserFilter, SourceFilter, getStatusColor as getSharedStatusColor } from '@/components/Filters';
 
 // Import combobox components
@@ -100,25 +101,23 @@ const mockEmails = [
   { id: 3, subject: 'Proposal Documents', preview: 'Attached please find the detailed proposal...', date: '2024-01-18 04:50 PM', read: false, type: 'sent' }
 ];
 
-const mockWhatsAppMessages = [
-  { id: 1, text: 'Hi, thanks for reaching out! How can I help you today?', time: '10:30 AM', sent: true },
-  { id: 2, text: 'Hi! I\'m interested in learning more about your enterprise solutions.', time: '10:32 AM', sent: false },
-  { id: 3, text: 'Great! I\'d be happy to walk you through our offerings. Would you like to schedule a demo?', time: '10:33 AM', sent: true },
-  { id: 4, text: 'Yes, that would be perfect. How about next Tuesday?', time: '10:35 AM', sent: false },
-  { id: 5, text: 'Tuesday works for me. I\'ll send over a calendar invite shortly.', time: '10:36 AM', sent: true }
-];
-
 
 const LeadDetailsPage: React.FC = () => {
   const { user } = useAuth();
   const { leads: contextLeads, isLoading: contextLoading, updateLead: updateLeadInContext } = useLeads();
   const { leadId } = useParams<{ leadId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [lead, setLead] = useState<Lead | null>(null);
-  const [activeTab, setActiveTab] = useState('form');
-  const [newMessage, setNewMessage] = useState('');
-  const [messages, setMessages] = useState(mockWhatsAppMessages);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'form');
+
+  // Sync activeTab with searchParams when searchParams change
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
 
   // New states for comments
   const [newComment, setNewComment] = useState('');
@@ -423,48 +422,12 @@ const LeadDetailsPage: React.FC = () => {
     }
   }, [leadId, allLeads, employeeId, email, user.team]);
 
-  // Scroll to bottom for WhatsApp messages
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  // Scroll to bottom removed - now handled in WhatsAppTab
+  // Get current lead from context leads (instant, no loading)
 
 
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
 
-  const handleSendMessage = () => {
-    if (newMessage.trim() === '') return;
-
-    const newMsg = {
-      id: messages.length + 1,
-      text: newMessage,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      sent: true
-    };
-
-    setMessages([...messages, newMsg]);
-    setNewMessage('');
-
-    // Simulate reply after delay
-    setTimeout(() => {
-      const replyMsg = {
-        id: messages.length + 2,
-        text: 'Thanks for your message. I\'ll get back to you soon.',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        sent: false
-      };
-      setMessages(prev => [...prev, replyMsg]);
-    }, 2000);
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
 
   const handleCommentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -525,7 +488,7 @@ const LeadDetailsPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen ml-[30px]">
+    <div className="ml-[30px] p-0.5 lg:pl-6 lg:pr-6 lg:pt-6">
       {/* Header (One Row) */}
       <div className="mb-6">
         <div className="flex items-center justify-between w-full">
@@ -934,89 +897,10 @@ const LeadDetailsPage: React.FC = () => {
         )}
 
         {/* WhatsApp Tab */}
-        {activeTab === 'whatsapp' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
-              {/* Chat Header */}
-              <div className="bg-green-500 text-white p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white font-semibold">
-                      {lead.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                    <div>
-                      <p className="font-semibold">{lead.name}</p>
-                      <p className="text-green-100 text-sm">Online</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button className="text-green-100 hover:text-white transition-colors">
-                      <Phone size={20} />
-                    </button>
-                    <button className="text-green-100 hover:text-white transition-colors">
-                      <Video size={20} />
-                    </button>
-                    <button className="text-green-100 hover:text-white transition-colors">
-                      <MoreVertical size={20} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Chat Messages */}
-              <div className="h-96 overflow-y-auto bg-green-50 p-4 space-y-3">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${message.sent ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-xs lg:max-w-md rounded-2xl px-4 py-2 ${message.sent
-                        ? 'bg-green-100 text-gray-800 rounded-br-none'
-                        : 'bg-white text-gray-800 rounded-bl-none shadow-sm'
-                        }`}
-                    >
-                      <p className="text-sm">{message.text}</p>
-                      <p className="text-xs text-gray-500 text-right mt-1">{message.time}</p>
-                    </div>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Message Input */}
-              <div className="bg-gray-100 p-4 border-t border-gray-200">
-                <div className="flex items-center gap-2">
-                  <button className="text-gray-500 hover:text-gray-700 transition-colors p-2">
-                    <Paperclip size={20} />
-                  </button>
-                  <button className="text-gray-500 hover:text-gray-700 transition-colors p-2">
-                    <Smile size={20} />
-                  </button>
-                  <div className="flex-1 relative">
-                    <input
-                      type="text"
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      placeholder="Type a message..."
-                      className="w-full px-4 py-3 rounded-full border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    />
-                  </div>
-                  <button
-                    onClick={handleSendMessage}
-                    disabled={!newMessage.trim()}
-                    className="bg-green-500 text-white p-3 rounded-full hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <Send size={20} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+        {activeTab === 'whatsapp' && lead && (
+          <WhatsAppTab lead={lead} />
         )}
       </div>
-
     </div>
   );
 };

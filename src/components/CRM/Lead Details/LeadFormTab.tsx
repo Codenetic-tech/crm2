@@ -218,7 +218,8 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
     type = 'text',
     placeholder,
     options,
-    span = 1
+    span = 1,
+    disabled = false
   }: any) => (
     <div className={`space-y-1 ${span === 2 ? 'md:col-span-2' : ''}`}>
       <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
@@ -227,7 +228,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
       </Label>
       {isEditing ? (
         options ? (
-          <Select value={editValue || value || ''} onValueChange={onChange}>
+          <Select value={editValue || value || ''} onValueChange={onChange} disabled={disabled}>
             <SelectTrigger className="h-9">
               <SelectValue placeholder={placeholder} />
             </SelectTrigger>
@@ -246,6 +247,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
             rows={3}
             placeholder={placeholder}
             className="resize-none"
+            disabled={disabled}
           />
         ) : (
           <Input
@@ -254,6 +256,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
             onChange={(e) => onChange(type === 'number' ? Number(e.target.value) : e.target.value)}
             placeholder={placeholder}
             className="h-9"
+            disabled={disabled}
           />
         )
       ) : (
@@ -295,7 +298,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
               <Badge variant="outline" className="px-3 py-1">
                 {lead.industry}
               </Badge>
-              {lead.createdAt && <LeadTimer createdAt={lead.createdAt} />}
+              {lead.validityDate && <LeadTimer validityDate={lead.validityDate} />}
             </div>
           </div>
         </div>
@@ -372,6 +375,7 @@ const LeadFormTab: React.FC<LeadFormTabProps> = ({
                 editValue={editedLead.status}
                 onChange={(val: string) => handleFieldChange('status', val)}
                 options={statusOptions}
+                disabled={lead.status === 'won' || lead.status === 'client'}
               />
               <CompactField
                 icon={Briefcase}

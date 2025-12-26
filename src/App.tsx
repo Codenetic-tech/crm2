@@ -20,6 +20,7 @@ import PettyCashPage from './components/petty-cash';
 import PettyCashManagement from './components/PettyCash/PettyCashManagement';
 import HRMS from './pages/hrms';
 import CRMPage from './pages/crm';
+import Updates from './components/Updates';
 
 const queryClient = new QueryClient();
 
@@ -184,6 +185,14 @@ const AppContent = () => {
           element={
             <ProtectedRoute>
               <ComingSoon />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/updates"
+          element={
+            <ProtectedRoute>
+              <Updates />
             </ProtectedRoute>
           }
         />

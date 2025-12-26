@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Search, User, LogOut, Settings, Bell, AlarmClockCheck, Ticket, TicketIcon, AlarmClockCheckIcon } from 'lucide-react';
+import { Search, User, LogOut, Settings, Bell, AlarmClockCheck, Ticket, TicketIcon, AlarmClockCheckIcon, Sparkle } from 'lucide-react';
 import Notification from './Notification';
 import { KYCTracker } from './KYCTracker';
 import { toast } from '@/hooks/use-toast';
@@ -21,6 +21,7 @@ import { CheckTreePicker } from 'rsuite';
 import { DateRangePicker } from 'rsuite';
 import 'rsuite/CheckTreePicker/styles/index.css';
 import 'rsuite/DateRangePicker/styles/index.css';
+import { useNavigate } from "react-router-dom";
 
 interface TreeDataNode {
   label: string;
@@ -33,6 +34,7 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ hierarchyTreeData }) => {
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
   const {
     selectedHierarchy,
@@ -215,10 +217,21 @@ const Header: React.FC<HeaderProps> = ({ hierarchyTreeData }) => {
 
         {/* Icons Container */}
         <div className="flex items-center gap-3 border-l border-gray-200 pl-4">
+          {/* Updates Icon */}
+          <button
+            onClick={() => navigate("/updates")}
+            className="relative p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 group"
+          >
+            <Sparkle size={20} />
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-4 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
+              Updates
+            </div>
+          </button>
+
           {/* Profile Icon */}
           <button className="relative p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 group">
             <AlarmClockCheckIcon size={20} />
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
             <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-4 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
               Task
             </div>

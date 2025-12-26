@@ -1,6 +1,7 @@
 // Layout.tsx
 import React, { useState, useMemo } from 'react';
 import { SidebarProvider } from '@/components/ui/sidebar';
+import { useLocation } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import Header from './Header';
 import { Menu, X, Home, Users, BarChart3, Settings, LogOut } from 'lucide-react';
@@ -31,6 +32,9 @@ interface LayoutProps {
 // Inner component that uses the filter context
 const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useLocation();
+  const isUpdatesPage = location.pathname === '/updates';
+  const isLeadDetailsPage = location.pathname.startsWith('/crm/leads/') && location.pathname.split('/').length === 4;
   const { logout } = useAuth();
   const { setHierarchyTreeData } = useFilter();
   const { user } = useAuth();
@@ -244,7 +248,7 @@ const LayoutContent: React.FC<LayoutProps> = ({ children }) => {
         </div>
 
         {/* Main Content - Scrollable */}
-        <main className="flex-1 overflow-y-auto p-0.5 lg:pl-6 lg:pr-6 lg:pt-6 pb-16 lg:pb-6">
+        <main className={`flex-1 ${isUpdatesPage || isLeadDetailsPage ? 'overflow-hidden' : 'overflow-y-auto p-0.5 lg:pl-6 lg:pr-6 lg:pt-6 pb-16'}`}>
           {children}
         </main>
 

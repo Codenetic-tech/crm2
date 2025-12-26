@@ -15,7 +15,7 @@ import { useCallback, useEffect } from 'react';
 interface KYCData {
     status: string;
     reason: string;
-    // For successful response
+    // For successful response (Existing Account)
     clientCode?: string;
     BranchCode?: string;
     ReferedBy?: string;
@@ -27,7 +27,7 @@ interface KYCData {
     bse_CM?: string;
     bse_FO?: string;
     TradeDone?: string;
-    // For NOT-FOUND response
+    // For In-Progress or Not Found
     Application?: string;
     Created?: string;
     Stage?: string;
@@ -199,51 +199,10 @@ export const KYCTracker: React.FC = () => {
                     </DialogHeader>
 
                     {kycData && (
-                        <div className="space-y-6 mt-4">
-                            {/* Check if Application is NOT-FOUND */}
-                            {kycData.Application === 'NOT-FOUND' ? (
-                                <div className="space-y-4">
-                                    {/* NOT-FOUND Message */}
-                                    <div className="p-6 bg-gradient-to-br from-orange-50 to-red-50 rounded-lg border border-orange-200 text-center">
-                                        <XCircle className="mx-auto h-16 w-16 text-orange-500 mb-3" />
-                                        <h3 className="text-xl font-bold text-gray-900 mb-2">Application Not Found</h3>
-                                        <p className="text-sm text-gray-600">No KYC application details found for the entered client code.</p>
-                                    </div>
-
-                                    {/* Available Information */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                                            <div className="flex items-center gap-2 text-gray-600">
-                                                <Calendar size={16} />
-                                                <p className="text-xs font-medium">Created</p>
-                                            </div>
-                                            <p className="text-sm font-semibold text-gray-900">{kycData.Created || 'N/A'}</p>
-                                        </div>
-                                        <div className="space-y-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                                            <div className="flex items-center gap-2 text-gray-600">
-                                                <TrendingUp size={16} />
-                                                <p className="text-xs font-medium">Stage</p>
-                                            </div>
-                                            <p className="text-sm font-semibold text-gray-900">{kycData.Stage || 'N/A'}</p>
-                                        </div>
-                                        <div className="space-y-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                                            <div className="flex items-center gap-2 text-gray-600">
-                                                <User size={16} />
-                                                <p className="text-xs font-medium">Referred By</p>
-                                            </div>
-                                            <p className="text-sm font-semibold text-gray-900">{kycData.ReferedBy || 'N/A'}</p>
-                                        </div>
-                                        <div className="space-y-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                                            <div className="flex items-center gap-2 text-gray-600">
-                                                <Building2 size={16} />
-                                                <p className="text-xs font-medium">Branch</p>
-                                            </div>
-                                            <p className="text-sm font-semibold text-gray-900">{kycData.Branch || 'N/A'}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <>
+                        <div className="mt-4">
+                            {/* State 1: Account Already Active (Has Client Code) */}
+                            {kycData.clientCode ? (
+                                <div className="space-y-6">
                                     {/* Header Info */}
                                     <div className="grid grid-cols-2 gap-4 p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border border-blue-100">
                                         <div className="space-y-1">
@@ -322,7 +281,76 @@ export const KYCTracker: React.FC = () => {
                                             {getStatusBadge(kycData.TradeDone)}
                                         </div>
                                     </div>
-                                </>
+                                </div>
+                            ) : kycData.Application && kycData.Application !== 'NOT-FOUND' ? (
+                                <div className="space-y-6">
+                                    {/* State 2: KYC In-Progress (Has Application ID) - Identical structure to Active Account */}
+                                    {/* Header Info */}
+                                    <div className="grid grid-cols-2 gap-4 p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border border-blue-100">
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-gray-600 font-medium">Application ID</p>
+                                            <p className="text-lg font-bold text-gray-900">#{kycData.Application}</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-xs text-gray-600 font-medium">Status</p>
+                                            <div className="flex items-center gap-2">
+                                                <TrendingUp className="text-blue-600" size={20} />
+                                                <p className="text-lg font-bold text-blue-600">{kycData.status}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Basic Details Grid */}
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="space-y-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                            <div className="flex items-center gap-2 text-gray-600">
+                                                <Building2 size={16} />
+                                                <p className="text-xs font-medium">Branch</p>
+                                            </div>
+                                            <p className="text-sm font-semibold text-gray-900">{kycData.Branch || 'N/A'}</p>
+                                        </div>
+                                        <div className="space-y-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                            <div className="flex items-center gap-2 text-gray-600">
+                                                <User size={16} />
+                                                <p className="text-xs font-medium">Referred By</p>
+                                            </div>
+                                            <p className="text-sm font-semibold text-gray-900">{kycData.ReferedBy || 'N/A'}</p>
+                                        </div>
+                                        <div className="space-y-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                            <div className="flex items-center gap-2 text-gray-600">
+                                                <Calendar size={16} />
+                                                <p className="text-xs font-medium">Created Date</p>
+                                            </div>
+                                            <p className="text-sm font-semibold text-gray-900">{kycData.Created || 'N/A'}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Prominent Stage Display (Similar to Trade Done bar) */}
+                                    <div className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                                        <div className="flex flex-col gap-2">
+                                            <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Current KYC Stage</span>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-lg font-black text-gray-900 tracking-tight">{kycData.Stage}</span>
+                                                <div className="bg-blue-600 text-white p-1.5 rounded-full">
+                                                    <CheckCircle2 size={18} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-[10px] text-gray-400 text-center italic">
+                                        Application is currently being processed by the KYC team.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {/* State 3: Application NOT-FOUND */}
+                                    <div className="p-6 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-center">
+                                        <XCircle className="mx-auto h-12 w-12 text-red-600 mb-2" />
+                                        <h3 className="text-lg font-bold text-gray-900">Application Not Found</h3>
+                                        <p className="text-sm text-gray-500">No active application was found for this code.</p>
+                                    </div>
+                                </div>
                             )}
                         </div>
                     )}

@@ -189,7 +189,7 @@ export const AddLeadDialog: React.FC<AddLeadDialogProps> = ({ onLeadAdded }) => 
 
           <div className="space-y-2">
             <Label htmlFor="leadSource" className="text-sm font-medium">
-              Lead Source
+              Select Tag *
             </Label>
             <select
               id="leadSource"
@@ -198,7 +198,7 @@ export const AddLeadDialog: React.FC<AddLeadDialogProps> = ({ onLeadAdded }) => 
               onChange={handleInputChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="">Select lead source</option>
+              <option value="">Select suitable tag</option>
               <option value="Website">Website</option>
               <option value="Referral">Referral</option>
               <option value="Social Media">Social Media</option>

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, Company, Employee } from '../utils';
 import { clearAllCache } from '@/utils/crmCache';
+import { trackSession, getISTTime, type SessionData } from '@/utils/session';
 
 interface AuthContextType {
   user: User | null;
@@ -11,7 +12,7 @@ interface AuthContextType {
   token: string | null;
   path: string | null;
   login: (employeeId: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: (message?: 'logged in' | 'manually logged out' | 'tab closed') => void;
   switchRole: (role: string) => void;
 }
 
@@ -82,6 +83,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           if (savedToken) setToken(savedToken);
           if (savedPath) setPath(savedPath);
           setIsAuthenticated(true);
+
+          // Handle deferred session tracking (for previous tab closures)
+          const pendingLogout = localStorage.getItem('crm_pending_logout');
+          if (pendingLogout) {
+            try {
+              const logoutData = JSON.parse(pendingLogout);
+              const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+              const isReload = navEntries.length > 0 && navEntries[0].type === 'reload';
+
+              if (!isReload) {
+                // If it wasn't a reload, it was a real closure previously
+                trackSession(logoutData);
+              }
+            } catch (e) {
+              console.error('Error processing pending logout:', e);
+            } finally {
+              localStorage.removeItem('crm_pending_logout');
+            }
+          }
+
+          // Track manual login / new session start - ONLY if not a refresh
+          const isRefresh = sessionStorage.getItem('crm_session_initialized');
+          if (!isRefresh && savedUser) {
+            const userData = JSON.parse(savedUser);
+            const loginTime = getISTTime();
+            localStorage.setItem('session_login_time', loginTime);
+
+            trackSession({
+              email: userData.email,
+              login_datetime: loginTime,
+              logout_datetime: loginTime,
+              message: 'logged in'
+            });
+            sessionStorage.setItem('crm_session_initialized', 'true');
+          }
         } else {
           // Clear any corrupted/incomplete data
           clearAuthData();
@@ -261,6 +297,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.setItem('hrms_token', loginData.token || '');
       localStorage.setItem('hrms_path', loginData.path || '');
 
+      // Store session login time
+      const loginTime = getISTTime();
+      localStorage.setItem('session_login_time', loginTime);
+      sessionStorage.setItem('crm_session_initialized', 'true');
+
+      // Track login event
+      trackSession({
+        email: userData.email,
+        login_datetime: loginTime,
+        logout_datetime: loginTime,
+        message: 'logged in'
+      });
+
     } catch (error) {
       console.error('Login error:', error);
       clearAuthData();
@@ -277,13 +326,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const logout = (message: 'logged in' | 'manually logged out' | 'tab closed' = 'manually logged out') => {
+    // Send session tracking data before clearing
+    const loginTime = localStorage.getItem('session_login_time');
+    if (user && loginTime) {
+      trackSession({
+        email: user.email,
+        login_datetime: loginTime,
+        logout_datetime: getISTTime(),
+        message: message
+      });
+    }
 
-
-  const logout = () => {
-    // Immediately clear local data
+    // Immediately clear local data and pending reports
     clearAuthData();
+    localStorage.removeItem('crm_pending_logout');
     // Clear IndexedDB cache
     clearAllCache().catch(console.error);
+    localStorage.removeItem('session_login_time');
+    sessionStorage.removeItem('crm_session_initialized');
   };
 
   const switchRole = (role: string) => {
@@ -293,6 +354,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.setItem('hrms_user', JSON.stringify(updatedUser));
     }
   };
+
+  // Handle tab closure tracking
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const loginTime = localStorage.getItem('session_login_time');
+      if (user && loginTime) {
+        // Defer tracking instead of sending immediately
+        // This allows us to check if it was a refresh on next load
+        const data: SessionData = {
+          email: user.email,
+          login_datetime: loginTime,
+          logout_datetime: getISTTime(),
+          message: 'tab closed'
+        };
+        localStorage.setItem('crm_pending_logout', JSON.stringify(data));
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [user]);
 
   return (
     <AuthContext.Provider value={{

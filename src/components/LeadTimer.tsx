@@ -1,40 +1,27 @@
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Clock } from 'lucide-react';
 
-export const LeadTimer: React.FC<{ createdAt: string }> = ({ createdAt }) => {
-    const [timeRemaining, setTimeRemaining] = useState('');
-    const [isExpired, setIsExpired] = useState(false);
+export const LeadTimer: React.FC<{ validityDate?: string }> = ({ validityDate }) => {
+    if (!validityDate) return null;
 
-    useEffect(() => {
-        const updateTimer = () => {
-            const createdDate = new Date(createdAt);
-            const expirationDate = new Date(createdDate.getTime() + (45 * 24 * 60 * 60 * 1000)); // 45 days validity
-            const now = new Date().getTime();
-            const diff = expirationDate.getTime() - now;
+    const getRemainingDays = () => {
+        const expirationDate = new Date(validityDate);
+        const now = new Date();
 
-            if (diff <= 0) {
-                setIsExpired(true);
-                setTimeRemaining('Expired');
-                return;
-            }
+        // Reset time to midnight for both dates for accurate day calculation
+        const expDateMidnight = new Date(expirationDate.getFullYear(), expirationDate.getMonth(), expirationDate.getDate());
+        const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-            setIsExpired(false);
-            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const diff = expDateMidnight.getTime() - nowMidnight.getTime();
+        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
 
-            const parts = [];
-            if (days > 0) parts.push(`${days}d`);
-            parts.push(`${hours}h`);
+        if (days < 0) return { text: 'Expired', isExpired: true };
+        if (days === 0) return { text: 'Expires today', isExpired: false };
+        return { text: `${days} days remaining`, isExpired: false };
+    };
 
-            setTimeRemaining(`${parts.join(' ')} remaining`);
-        };
-
-        updateTimer();
-        const interval = setInterval(updateTimer, 3600000); // Update every hour
-
-        return () => clearInterval(interval);
-    }, [createdAt]);
+    const { text, isExpired } = getRemainingDays();
 
     return (
         <div
@@ -42,10 +29,10 @@ export const LeadTimer: React.FC<{ createdAt: string }> = ({ createdAt }) => {
                 ? 'bg-red-50 text-red-600 border-red-200'
                 : 'bg-emerald-50 text-emerald-600 border-emerald-200'
                 }`}
-            title="Time remaining to convert (45 days validity)"
+            title={`Lead validity ends on ${validityDate}`}
         >
             <Clock size={12} className={isExpired ? "text-red-500" : "text-emerald-500"} />
-            <span>{timeRemaining}</span>
+            <span>{text}</span>
         </div>
     );
 };

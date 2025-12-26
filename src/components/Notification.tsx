@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import {
     Popover,
     PopoverContent,
@@ -38,6 +39,7 @@ interface NotificationItem {
 
 const NotificationSystem: React.FC = () => {
     const { employee } = useAuth();
+    const navigate = useNavigate();
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
@@ -197,6 +199,32 @@ const NotificationSystem: React.FC = () => {
         return n.type === selectedType;
     });
 
+    const handleNotificationClick = (notification: NotificationItem) => {
+        setIsOpen(false);
+
+        let targetLeadId = notification.reference_name;
+
+        // If reference_name is missing, try to parse from notification_text
+        if (!targetLeadId && notification.notification_text) {
+            const match = notification.notification_text.match(/CRM-LEAD-\d{4}-\d+/i);
+            if (match) {
+                targetLeadId = match[0];
+            }
+        }
+
+        if (targetLeadId) {
+            // Check if it's a WhatsApp notification
+            const isWhatsApp = /whatsapp/i.test(notification.notification_text || '') ||
+                /whatsapp/i.test(notification.type || '');
+
+            if (isWhatsApp) {
+                navigate(`/crm/leads/${targetLeadId}?tab=whatsapp`);
+            } else {
+                navigate(`/crm/leads/${targetLeadId}`);
+            }
+        }
+    };
+
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
@@ -268,7 +296,11 @@ const NotificationSystem: React.FC = () => {
                     ) : (
                         <div className="divide-y divide-gray-100">
                             {filteredNotifications.map((notification, index) => (
-                                <div key={`${notification.creation}-${index}`} className={`p-4 hover:bg-slate-50 transition-colors ${notification.read === 0 ? 'bg-blue-50/30' : ''}`}>
+                                <div
+                                    key={`${notification.creation}-${index}`}
+                                    className={`p-4 hover:bg-slate-50 transition-colors cursor-pointer ${notification.read === 0 ? 'bg-blue-50/30' : ''}`}
+                                    onClick={() => handleNotificationClick(notification)}
+                                >
                                     <div
                                         className="text-sm text-gray-800 mb-1 prose prose-sm max-w-none prose-p:my-0 prose-span:text-gray-900"
                                         dangerouslySetInnerHTML={{ __html: notification.notification_text }}

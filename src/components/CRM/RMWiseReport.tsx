@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 
 interface RMWiseReportProps {
     leads: Lead[];
+    teamMembers?: string[];
 }
 
 interface UserStat {
@@ -26,7 +27,7 @@ interface UserStat {
     statusCounts: Record<string, number>;
 }
 
-const RMWiseReport: React.FC<RMWiseReportProps> = ({ leads }) => {
+const RMWiseReport: React.FC<RMWiseReportProps> = ({ leads, teamMembers }) => {
     // Process leads to group by assigned user and calculate stats
     const userStats = useMemo(() => {
         const stats: Record<string, UserStat> = {};
@@ -108,9 +109,17 @@ const RMWiseReport: React.FC<RMWiseReportProps> = ({ leads }) => {
             });
         });
 
-        // Convert to array and sort by total leads desc
-        return Object.values(stats).sort((a, b) => b.totalLeads - a.totalLeads);
-    }, [leads]);
+        // Convert to array
+        const statsArray = Object.values(stats);
+
+        // Filter by teamMembers if provided
+        const filteredStats = teamMembers && teamMembers.length > 0
+            ? statsArray.filter(stat => teamMembers.includes(stat.userId))
+            : statsArray;
+
+        // Sort by total leads desc
+        return filteredStats.sort((a, b) => b.totalLeads - a.totalLeads);
+    }, [leads, teamMembers]);
 
     const handleExport = () => {
         const data = userStats.map(stat => ({

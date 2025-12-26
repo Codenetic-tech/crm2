@@ -56,6 +56,7 @@ export interface APILead {
   application: string;
   application_created_date: string;
   application_status: string;
+  validity_date: string;
 }
 
 export interface Lead {
@@ -103,6 +104,7 @@ export interface Lead {
   application: string;
   application_created_date: string;
   application_status: string;
+  validityDate?: string;
 }
 
 // LightLead interface for optimized caching
@@ -121,6 +123,7 @@ export interface LightLead {
   ucc?: string;
   branchCode?: string;
   _assign: string;
+  validityDate?: string;
 }
 
 // Import cache functions
@@ -192,7 +195,8 @@ export const toLightLead = (lead: Lead): LightLead => ({
   city: lead.city,
   ucc: lead.ucc,
   branchCode: lead.branchCode,
-  _assign: lead._assign
+  _assign: lead._assign,
+  validityDate: lead.validityDate
 });
 
 // Function to map API lead to our Lead interface
@@ -238,7 +242,8 @@ export const mapApiLeadToLead = (apiLead: APILead): Lead => {
     kyc_stage: apiLead.kyc_stage,
     application: apiLead.application,
     application_created_date: apiLead.application_created_date,
-    application_status: apiLead.application_status
+    application_status: apiLead.application_status,
+    validityDate: apiLead.validity_date
   };
 };
 
@@ -247,7 +252,8 @@ export const fetchLeads = async (employeeId: string, email: string, team: string
   try {
     // Try to get from cache first
     const cachedLeads = await getCachedLeads(employeeId, email);
-    if (cachedLeads) {
+    // Check if cache exists and has the new validityDate field to avoid stale data
+    if (cachedLeads && cachedLeads.length > 0 && 'validityDate' in cachedLeads[0]) {
       console.log('Returning cached leads');
       return cachedLeads;
     }
@@ -318,7 +324,8 @@ export const getLeadById = async (leadId: string, employeeId: string, email: str
   try {
     // Check cache first
     const cachedLead = await getCachedLeadDetails(leadId);
-    if (cachedLead) {
+    // Check if cache exists and has the new validityDate field
+    if (cachedLead && 'validityDate' in cachedLead) {
       console.log('Returning cached lead details');
       return cachedLead;
     }
